@@ -1,0 +1,85 @@
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const vm=require('node:vm');
+const {createServer}=require('./server.cjs');
+const adapter=require('./amap-client.js');
+const core=require('./core.js');
+const test=require('node:test');
+
+test('POI 缺失字段、照片与坐标不会制造评分或位置',()=>{
+  const p=adapter.normalize({id:'B123',name:'餐厅',location:{lng:113,lat:23},biz_ext:{rating:[],cost:[]},photos:[{url:'javascript:alert(1)'},{url:'https://example.test/a.jpg'}]});
+  assert.equal(p.rating,null);assert.equal(p.price,null);assert.equal(p.hours,null);
+  assert.deepEqual(p.location,[113,23]);assert.deepEqual(p.photos,['https://example.test/a.jpg']);
+  assert.equal(adapter.coordinates('not-a-coordinate'),null);
+  assert.equal(adapter.routeMinutes({routes:[{time:601}]}),11);
+  assert.equal(adapter.routeMinutes({routes:[]}),null);
+});
+test('真实路线时间和未知营业必须满足全部限制',()=>{
+  const cfg={budget:50,unknownPrice:false,open:false};
+  assert.equal(adapter.eligible({price:45},cfg,[10,31],[15,30]),false);
+  assert.equal(adapter.eligible({price:45},cfg,[10,null],[15,30]),false);
+  assert.equal(adapter.eligible({price:45},cfg,[10,25],[15,30]),true);
+  assert.equal(adapter.eligible({price:null},cfg,[10],[15]),false);
+  assert.equal(adapter.eligible({price:null},{...cfg,unknownPrice:true},[10],[15]),true);
+  assert.equal(adapter.eligible({price:45},{...cfg,open:true},[10],[15]),false);
+  assert.equal(adapter.eligible({price:45},{...cfg,open:true,unknownHours:true},[10],[15]),true);
+});
+test('SDK 回调处理失败、无数据与超时',async()=>{
+  assert.equal(await adapter.call(done=>done('no_data')),null);
+  await assert.rejects(adapter.call(done=>done('error')));
+  await assert.rejects(adapter.call(()=>{},5),/超时/);
+});
+test('菜系映射区分西餐、东南亚与烧烤，不能把地方菜当烧烤',()=>{
+  assert.equal(adapter.matchesCuisine({typecode:'050204',category:'法式菜品餐厅'},['西餐']),true);
+  assert.equal(adapter.matchesCuisine({typecode:'050204',category:'法式菜品餐厅'},['东南亚']),false);
+  assert.equal(adapter.matchesCuisine({typecode:'050206',category:'泰国/越南菜品餐厅'},['东南亚']),true);
+  assert.equal(adapter.matchesCuisine({typecode:'050118',category:'特色/地方风味餐厅',name:'家常菜'},['烧烤']),false);
+  assert.equal(adapter.matchesCuisine({typecode:'050118',name:'小院烧烤'},['烧烤']),true);
+});
+async function listen(server){await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));return 'http://127.0.0.1:'+server.address().port;}
+test('本地服务不暴露配置文件，未配置时不代理',async()=>{
+  let calls=0;const server=createServer({config:{key:'',security:''},fetcher:()=>calls++});const base=await listen(server);
+  try{
+    assert.deepEqual(await (await fetch(base+'/api/map-config')).json(),{configured:false,key:''});
+    for(const name of ['.env','.git/config','server.cjs','.env.example','%2eenv'])assert.equal((await fetch(base+'/'+name)).status,404);
+    assert.equal((await fetch(base+'/_AMapService/v3/place/around')).status,503);assert.equal(calls,0);
+    assert.equal((await fetch(base+'/app.js')).status,200);
+    assert.equal((await fetch(base+'/api/map-config',{headers:{Origin:'https://evil.example'}})).status,403);
+  }finally{await new Promise(resolve=>server.close(resolve));}
+});
+test('安全代理固定高德上游，覆盖伪造凭证并隐藏安全密钥',async()=>{
+  let forwarded;
+  const server=createServer({config:{key:'public-test-key',security:'private-test-code'},fetcher:async(url)=>{forwarded=url;return new Response('{"status":"1","echo":"private-test-code"}',{headers:{'Content-Type':'application/json'}});}});
+  const base=await listen(server);
+  try{
+    const config=await (await fetch(base+'/api/map-config')).json();assert.equal(config.security,undefined);
+    const response=await fetch(base+'/_AMapService/v3/place/around?key=wrong&jscode=wrong&location=113,23');
+    assert.equal(forwarded.origin,'https://restapi.amap.com');assert.equal(forwarded.searchParams.get('key'),'public-test-key');
+    assert.equal(forwarded.searchParams.get('jscode'),'private-test-code');assert.ok(!(await response.text()).includes('private-test-code'));
+    assert.equal((await fetch(base+'/_AMapService/https://evil.example')).status,403);
+  }finally{await new Promise(resolve=>server.close(resolve));}
+});
+
+function harness(map){
+  const element={addEventListener(){},innerHTML:'',textContent:'',open:false};
+  const context={state:{page:'near',origin:{name:'测试起点',location:[113,23]},config:{mode:'步行',limit:15,budget:0,types:[],count:6},people:[],excluded:new Set(),drawn:new Set(),repeat:false},
+    DouxMap:{...adapter,...map},Doux:core,document:{addEventListener(){},querySelector(){return element;}},$:()=>element,generate(){},render(){},fetch:async()=>({ok:false}),AbortSignal,console,setTimeout,clearTimeout};
+  vm.createContext(context);vm.runInContext(fs.readFileSync(__dirname+'/map-ui.js','utf8'),context);context.state.live=true;
+  return context;
+}
+test('较旧的候选请求不能覆盖新条件的结果',async()=>{
+  let resolveOld,count=0;
+  const restaurant=id=>({id,source:'amap',location:[113.1,23.1],price:30});
+  const h=harness({nearby:()=>++count===1?new Promise(resolve=>resolveOld=resolve):Promise.resolve([restaurant('new')]),route:async()=>10});
+  const old=h.refreshCandidates();await h.refreshCandidates();resolveOld([restaurant('old')]);await old;
+  assert.equal(h.state.candidates[0].id,'new');assert.equal(h.state.loading,false);
+});
+test('公平集合按真实多起点耗时排序且排除超时店',async()=>{
+  const h=harness({nearby:async()=>[1,2,3].map(n=>({id:'store'+n,location:[n,23],price:30})),route:async(from,to)=>({1:[10,30],2:[20,20],3:[10,40]}[to[0]][from[0]-1])});
+  h.state.page='fair';h.state.people=[{origin:{location:[1,23]},mode:'步行',limit:30},{origin:{location:[2,23]},mode:'驾车',limit:30}];
+  await h.refreshCandidates();assert.deepEqual(Array.from(h.state.candidates,s=>s.id),['store2','store1']);
+});
+test('详情请求失败保留真实基础资料而非填入演示介绍',async()=>{
+  const h=harness({details:async()=>{throw new Error('offline')}}),store={id:'real',source:'amap',name:'真实店'};
+  await h.prepareDetails(store,0);assert.equal(store.name,'真实店');assert.equal(store.detailError,true);assert.equal(store.intro,undefined);
+});

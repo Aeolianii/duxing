@@ -1,1 +1,62 @@
-const http=require('node:http'),fs=require('node:fs'),path=require('node:path');const root=__dirname;const types={'.html':'text/html; charset=utf-8','.js':'application/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.png':'image/png','.svg':'image/svg+xml'};const server=http.createServer((req,res)=>{let pathname;try{pathname=decodeURIComponent(new URL(req.url,'http://localhost').pathname)}catch{res.writeHead(400);return res.end()}const file=path.resolve(root,'.'+(pathname==='/'?'/index.html':pathname));if(!file.startsWith(root+path.sep)){res.writeHead(403);return res.end()}fs.readFile(file,(err,buf)=>{if(err){res.writeHead(404);return res.end('Not found')}res.writeHead(200,{'Content-Type':types[path.extname(file)]||'application/octet-stream','Cache-Control':'no-store'});res.end(buf)})});server.listen(5173,'127.0.0.1',()=>console.log('Local: http://127.0.0.1:5173'));server.on('error',e=>{console.error(e.code==='EADDRINUSE'?'5173 端口已占用，请打开 http://127.0.0.1:5173 或关闭旧服务。':e);process.exit(1)});
+const http = require('node:http');
+const fs = require('node:fs');
+const path = require('node:path');
+
+function loadConfig(root = __dirname) {
+  let source = '';
+  try { source = fs.readFileSync(path.join(root, '.env'), 'utf8'); } catch {}
+  const values = {};
+  for (const line of source.split(/\r?\n/)) {
+    const match = line.match(/^\s*(AMAP_JS_KEY|AMAP_SECURITY_CODE)\s*=\s*(.*?)\s*$/);
+    if (match) values[match[1]] = match[2].replace(/^(['"])(.*)\1$/, '$2');
+  }
+  return {key: process.env.AMAP_JS_KEY || values.AMAP_JS_KEY || '', security: process.env.AMAP_SECURITY_CODE || values.AMAP_SECURITY_CODE || ''};
+}
+
+function createServer({config = loadConfig(), fetcher = fetch} = {}) {
+  const files = new Set(['index.html', 'style.css', 'app.js', 'core.js', 'amap-client.js', 'map-ui.js']);
+  const types = {'.html':'text/html; charset=utf-8', '.js':'application/javascript; charset=utf-8', '.css':'text/css; charset=utf-8'};
+  return http.createServer(async (req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+    const json = (status, data) => {res.writeHead(status, {'Content-Type':'application/json; charset=utf-8'}); res.end(JSON.stringify(data));};
+    if (req.method !== 'GET') return json(405, {error:'仅支持 GET 请求'});
+    if (!/^(127\.0\.0\.1|localhost)(:\d+)?$/.test(req.headers.host || '')) return json(403, {error:'仅允许本机访问'});
+    if (req.headers['sec-fetch-site'] === 'cross-site') return json(403, {error:'不允许跨站请求'});
+    if (req.headers.origin && req.headers.origin !== `http://${req.headers.host}`) return json(403, {error:'不允许跨站请求'});
+    let url;
+    try { url = new URL(req.url, 'http://localhost'); } catch { return json(400, {error:'请求地址无效'}); }
+    const configured = Boolean(config.key && config.security);
+    if (url.pathname === '/api/map-config') return json(200, {configured, key:configured ? config.key : ''});
+    if (url.pathname.startsWith('/_AMapService/')) {
+      if (!configured) return json(503, {error:'尚未配置高德 Key 和安全密钥'});
+      const targetPath = url.pathname.slice('/_AMapService'.length);
+      if (!/^\/v[345]\/[a-zA-Z0-9_/-]+$/.test(targetPath)) return json(403, {error:'不支持的地图服务路径'});
+      const target = new URL(targetPath, 'https://restapi.amap.com');
+      target.search = url.search;
+      target.searchParams.set('key', config.key);
+      target.searchParams.set('jscode', config.security);
+      try {
+        const upstream = await fetcher(target, {signal:AbortSignal.timeout(15000), redirect:'error'});
+        const content = await upstream.text();
+        const safe = content.split(config.security).join('[redacted]');
+        res.writeHead(upstream.status, {'Content-Type':upstream.headers.get('content-type') || 'application/json; charset=utf-8'});
+        return res.end(safe);
+      } catch { return json(502, {error:'高德服务暂时不可用，请稍后重试'}); }
+    }
+    const name = url.pathname === '/' ? 'index.html' : url.pathname.slice(1);
+    if (!files.has(name)) return json(404, {error:'Not found'});
+    fs.readFile(path.join(__dirname, name), (error, body) => {
+      if (error) return json(404, {error:'Not found'});
+      res.writeHead(200, {'Content-Type':types[path.extname(name)]});
+      res.end(body);
+    });
+  });
+}
+if (require.main === module) {
+  const server = createServer();
+  server.listen(5173, '127.0.0.1', () => console.log('都行: http://127.0.0.1:5173'));
+  server.on('error', error => {console.error(error.code === 'EADDRINUSE' ? '5173 端口已占用，请关闭旧服务再启动。' : error.message); process.exitCode = 1;});
+}
+module.exports = {createServer, loadConfig};
