@@ -1,0 +1,10 @@
+(function(root){
+ const data=[['巷口小馆','中餐',48,42,43,'家常小炒，热气腾腾的一餐','🥘'],['面包与番茄','西餐',86,55,45,'番茄意面与刚出炉的面包','🍝'],['首尔饭桌','韩餐',72,48,57,'石锅拌饭配几碟清爽小菜','🍲'],['一碗好面','中餐',28,60,55,'现煮汤面，简单也满足','🍜'],['小岛食堂','日料',98,37,55,'定食与乌冬，慢慢吃顿饭','🍱'],['青柠厨房','东南亚',89,56,36,'椰香咖喱与酸甜青柠风味','🍛'],['炭火小聚','烧烤',108,65,35,'炭火烤串，很适合一起分享','🍢'],['热锅见','火锅',118,33,35,'热腾腾的锅底与鲜切配菜','🥘'],['南风小炒','中餐',58,30,63,'一盘现炒，一碗米饭','🍚'],['松间洋食','西餐',138,70,62,'烤蔬菜与慢煎牛排','🥩'],['米粒韩食','韩餐',null,45,29,'一人食也很丰盛的韩式饭桌','🍙'],['晚风面馆','中餐',32,57,68,'夜里也能吃到一碗热汤面','🍜']];
+ const stores=data.map((d,i)=>({id:'demo-'+i,name:d[0],type:d[1],price:d[2],x:d[3],y:d[4],intro:d[5],emoji:d[6],address:'演示街区 · '+['榕树路','花园街','沿河路'][i%3]+(12+i*7)+'号',rating:(4.3+i%5*.1).toFixed(1),hours:i===10?null:i===11?[[0,1440]]:[[660,840],[1020,1320]],color:['#f8d6b3','#dce8c8','#f3c4c3','#f5e2a1','#c6dce8','#d9cee9'][i%6]}));
+ const duration=(s,p)=>Math.ceil(Math.hypot(s.x-p.x,s.y-p.y)*(p.mode==='驾车'?.25:.55)+3);
+ function openAt(intervals,minute){return intervals?intervals.some(([a,b])=>a<=b?minute>=a&&minute<b:minute>=a||minute<b):null;}
+ function evaluate(s,config,people,now=new Date()) {const times=people.map(p=>duration(s,p)); const arrival=(now.getHours()*60+now.getMinutes()+Math.max(...times))%1440; const opening=openAt(s.hours,arrival);return {...s,times,opening,max:Math.max(...times),gap:Math.max(...times)-Math.min(...times),sum:times.reduce((a,b)=>a+b,0),eligible:(!config.types.length||config.types.includes(s.type))&&times.every((t,i)=>t<=people[i].limit)&&(!config.budget||(s.price==null?config.unknownPrice:s.price<=config.budget))&&(!config.open||(opening==null?config.unknownHours:opening))};}
+ const fairSort=(a,b)=>a.max-b.max||a.gap-b.gap||a.sum-b.sum||a.id.localeCompare(b.id);
+ function shuffle(a){a=a.slice();for(let i=a.length-1;i>0;i--){let j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;}
+ const api={stores,duration,openAt,evaluate,fairSort,shuffle};if(typeof module!=='undefined')module.exports=api;else root.Doux=api;
+})(typeof window!=='undefined'?window:globalThis);

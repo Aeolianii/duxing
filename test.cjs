@@ -1,0 +1,18 @@
+const assert=require('node:assert/strict');
+const {openAt,evaluate,fairSort,shuffle,stores}=require('./core.js');
+assert.equal(openAt([[660,840],[1020,1320]],900),false,'午休不能视为营业');
+assert.equal(openAt([[660,840]],840),false,'关门时刻不包含');
+assert.equal(openAt([[1200,120]],30),true,'跨午夜营业');
+assert.equal(openAt(null,720),null,'未知营业不能推断');
+const cfg={types:[],budget:50,unknownPrice:false,open:false};
+const person={x:50,y:50,mode:'步行',limit:30};
+assert.equal(evaluate({...stores[0],price:50},cfg,[person]).eligible,true);
+assert.equal(evaluate({...stores[0],price:51},cfg,[person]).eligible,false);
+assert.equal(evaluate({...stores[0],price:null},cfg,[person]).eligible,false);
+assert.equal(evaluate({...stores[0],price:null},{...cfg,unknownPrice:true},[person]).eligible,true);
+assert.equal(evaluate(stores[0],cfg,[person,{...person,limit:1}]).eligible,false,'不能忽略超限成员');
+const a={id:'a',max:20,gap:10,sum:30},b={id:'b',max:18,gap:2,sum:34};
+assert.equal([a,b].sort(fairSort)[0].id,'b');
+const mixed=shuffle(stores);assert.equal(new Set(mixed.map(s=>s.id)).size,stores.length);
+assert.equal(stores[0].id,'demo-0','洗牌不改变原始数据');
+console.log('12 checks passed: 营业时段、预算未知、多人路线、最远优先、无放回候选');
