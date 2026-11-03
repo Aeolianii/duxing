@@ -151,3 +151,6 @@ dialog{max-height:90vh;max-height:90dvh}
   .hub-card strong{font-size:18px}
   .hub-arrow{bottom:28px}
 }
+/* 自选 / 足迹：美食与游玩模式切换 */
+.mode-toggle{margin:0 0 14px}
+.mode-toggle .chip{font-size:12px;padding:8px 14px;min-height:38px}

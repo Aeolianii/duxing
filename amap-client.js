@@ -122,9 +122,10 @@
   function decoratePlay(store, index) {
     return {...store, activity:'play', emoji:playEmoji(store), color:playColors[index % playColors.length]};
   }
-  async function search(query) {
+  async function search(query, center) {
     const A = await load();
-    const result = await call(done => new A.PlaceSearch({pageSize:8,extensions:'all'}).search(query,done));
+    const searcher = new A.PlaceSearch({pageSize:8,extensions:'all'});
+    const result = await call(done => center ? searcher.searchNearBy(query, center, 20000, done) : searcher.search(query, done));
     return (result?.poiList?.pois || []).map(normalize).filter(p => p.location);
   }
   async function nearby(origin, config) {
@@ -209,6 +210,6 @@
     if(!point) throw new Error('未获取到定位，请在地图上手动选点');
     return {location:point,name:result.formattedAddress || '我的位置'};
   }
-  const api={coordinates,normalize,routeMinutes,transitMinutes,cityAt,eligible,matchesCuisine,matchesPlay,playQueries,call,load,search,nearby,route,details,locate};
+  const api={coordinates,normalize,routeMinutes,transitMinutes,cityAt,eligible,matchesCuisine,matchesPlay,playQueries,playTypes:Object.keys(playQueries),decoratePlay,playEmoji,call,load,search,nearby,route,details,locate};
   if(typeof module!=='undefined') module.exports=api; else root.DouxMap=api;
 })(typeof window!=='undefined'?window:globalThis);

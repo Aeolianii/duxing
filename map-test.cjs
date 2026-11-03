@@ -123,9 +123,9 @@ test('安全代理固定高德上游，覆盖伪造凭证并隐藏安全密钥',
 });
 
 function harness(map){
-  const element={addEventListener(){},innerHTML:'',textContent:'',open:false,style:{},parentElement:{setAttribute(){}}};
-  const context={state:{page:'near',origin:{name:'测试起点',location:[113,23]},config:{mode:'步行',limit:15,budget:0,types:[],count:6},people:[],excluded:new Set(),drawn:new Set(),repeat:false},
-    DouxMap:{...adapter,...map},Doux:core,document:{addEventListener(){},querySelector(){return element;}},$:()=>element,generate(){},render(){},fetch:async()=>({ok:false}),AbortSignal,console,setTimeout,clearTimeout,window:{scrollTo(){}}};
+  const element={addEventListener(){},innerHTML:'',textContent:'',open:false,style:{},parentElement:{setAttribute(){}},close(){},showModal(){}};
+  const context={state:{page:'near',origin:{name:'测试起点',location:[113,23]},config:{mode:'步行',limit:15,budget:0,types:[],count:6,activity:'food'},people:[],excluded:new Set(),drawn:new Set(),repeat:false,request:0,custom:[],catalog:{}},
+    DouxMap:{...adapter,...map},Doux:core,document:{addEventListener(){},querySelector(){return element;}},$:()=>element,generate(){},render(){},toast(){},openCustom(){},fetch:async()=>({ok:false}),AbortSignal,console,setTimeout,clearTimeout,window:{scrollTo(){}}};
   vm.createContext(context);vm.runInContext(fs.readFileSync(__dirname+'/discovery.js','utf8'),context);vm.runInContext(fs.readFileSync(__dirname+'/map-ui.js','utf8'),context);context.state.live=true;
   return context;
 }
@@ -149,6 +149,18 @@ test('公平集合按真实多起点耗时排序且排除超时店',async()=>{
   const h=harness({nearby:async()=>[1,2,3].map(n=>({id:'store'+n,location:[n,23],price:30})),route:async(from,to)=>({1:[10,30],2:[20,20],3:[10,40]}[to[0]][from[0]-1])});
   h.state.page='fair';h.state.people=[{origin:{location:[1,23]},mode:'步行',limit:30},{origin:{location:[2,23]},mode:'驾车',limit:30}];
   await h.refreshCandidates();assert.deepEqual(Array.from(h.state.candidates,s=>s.id),['store2','store1']);
+});
+test('自选校验在游玩模式只保留娱乐场馆',async()=>{
+  const h=harness({route:async()=>8});
+  h.state.live=true;h.state.activity='play';
+  h.state.config={mode:'步行',limit:20,budget:0,types:[],count:6,activity:'play'};
+  h.state.custom=[
+    {id:'cinema',source:'amap',location:[113.31,23.11],category:'体育休闲服务;影剧院;电影院',name:'金逸影城'},
+    {id:'restaurant',source:'amap',location:[113.31,23.11],category:'餐饮服务;中餐厅',name:'某餐厅'},
+    {id:'manual',manual:true,name:'自组局'}
+  ];
+  await h.validateCustom();
+  assert.deepEqual(Array.from(h.state.candidates,s=>s.id),['cinema']);
 });
 test('详情请求失败保留真实基础资料而非填入演示介绍',async()=>{
   const h=harness({details:async()=>{throw new Error('offline')}}),store={id:'real',source:'amap',name:'真实店'};
