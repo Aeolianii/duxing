@@ -1,6 +1,11 @@
 'use strict';
 state.stage='map';state.locationMode='single';state.activeOrigin=0;
 const discovery={map:null,markers:[],token:0,previewToken:0,camera:null,previews:[],cache:null};
+const personColors=['#e56935','#4285dc','#e6b52d','#8f67d8','#30a486','#ec7294'];
+state.username='用户1';
+state.people.forEach((p,i)=>{p.username='用户'+(i+1);p.color=personColors[i];});
+function personIdentity(i){const p=state.people[i];return {username:p?.username||'用户'+(i+1),color:p?.color||personColors[i%personColors.length]};}
+function usernameField(i){const p=personIdentity(i);return `<label class="person-username"><span>用户名</span><input aria-label="成员${i+1}用户名" data-person="${i}" data-key="username" maxlength="20" value="${esc(p.username)}"></label>`;}
 const modeIcon=mode=>mode==='公共交通'?'🚇':mode==='驾车'?'🚗':'🚶';
 function destroyHomeMap(){
   discovery.token++;discovery.previewToken++;
@@ -27,13 +32,13 @@ function renderDiscovery(){
 }
 function originChips(){
   const group=state.page==='fair';
-  const list=state.live?originList():people().map((p,i)=>({...p,label:group?String.fromCharCode(65+i):'我'}));
-  return list.map((p,i)=>`<button class="origin-chip ${group&&i===state.activeOrigin?'selected':''}" ${group?`data-home-person="${i}"`:'id="homeOrigin"'}><b>${p.label}</b><span>${esc(p.name||'待选点')}${group?`<small>${p.mode} ${p.limit}分钟</small>`:''}</span></button>`).join('')+(group?'<button id="openPeople" class="origin-edit">编辑</button>':'');
+  const list=state.live?originList():people();
+  return list.map((p,i)=>{const identity=group?personIdentity(i):{username:state.username,color:personColors[0]};return `<button class="origin-chip ${group&&i===state.activeOrigin?'selected':''}" style="--person-color:${identity.color}" ${group?`data-home-person="${i}"`:'id="editUsername"'} title="${esc(identity.username)}"><span class="legend-pin">${originPin(identity.username)}</span><span>${esc(identity.username)}</span></button>`;}).join('')+(group?'<button id="openPeople" class="origin-edit">编辑</button>':'');
 }
-function originPin(label){
-  const group=label!=='我';
-  return `<svg class="origin-pin-art" viewBox="0 0 64 84" role="img" aria-label="${group?'成员 '+esc(label)+' 的出发点':'我的出发点'}"><path d="M32 1C14.9 1 1 14.9 1 32c0 21 31 51 31 51s31-30 31-51C63 14.9 49.1 1 32 1Z" fill="currentColor"/><circle cx="32" cy="31" r="13" fill="white"/>${group?`<text x="32" y="36" text-anchor="middle" fill="currentColor" font-size="15" font-weight="800">${esc(label)}</text>`:''}</svg>`;
+function originPin(username){
+  return `<svg class="origin-pin-art" viewBox="0 0 64 84" role="img" aria-label="${esc(username)}的出发点"><path d="M32 1C14.9 1 1 14.9 1 32c0 21 31 52 31 52s31-31 31-52C63 14.9 49.1 1 32 1Z" fill="currentColor"/><circle cx="32" cy="31" r="13" fill="white"/></svg>`;
 }
+function editUsername(){showModal(modalTop('怎么称呼你？')+`<label class="username-form">用户名<input id="currentUsername" maxlength="20" value="${esc(state.username)}"></label><button id="saveUsername" class="btn full sheet-note">保存用户名</button>`);}
 function demoHomeMap(){return `<div id="demoHomeMap" aria-label="演示地图，点击选择出发点"><svg viewBox="0 0 360 380" preserveAspectRatio="none" aria-hidden="true"><rect width="360" height="380" fill="#e5f4e6"/><path d="M310 -10 Q160 100 300 235 T320 400" stroke="#acdfe8" stroke-width="45" fill="none"/><g stroke="#fffdf8" stroke-width="14" fill="none"><path d="M-10 90 L390 140 M100 -10 L150 400 M-10 300 L390 245 M-10 200 L390 180"/></g><g fill="#cee8c7"><rect x="15" y="15" width="65" height="55" rx="15"/><rect x="175" y="30" width="55" height="60" rx="16"/><rect x="25" y="225" width="63" height="45" rx="14"/><rect x="190" y="300" width="60" height="65" rx="15"/></g><text x="16" y="355" fill="#689383" font-size="12">榕树街区 · 演示</text></svg><div id="demoPins"></div></div>`;}
 function bindDemoHome(){
   discovery.previews=eligible().slice(0,5);paintDemoPins();
@@ -45,7 +50,7 @@ function bindDemoHome(){
   };
 }
 function paintDemoPins(){
-  const ps=people();$('#demoPins').innerHTML=ps.map((p,i)=>`<span class="demo-origin" style="left:${p.x}%;top:${p.y}%">${originPin(state.page==='fair'?String.fromCharCode(65+i):'我')}</span>`).join('')+discovery.previews.map((s,i)=>`<button class="demo-food food-map-pin" data-preview="${i}" style="left:${15+i*16}%;top:${[28,55,36,70,25][i]}%"><span>${s.emoji}</span><small>${esc(s.name.slice(0,5))}</small></button>`).join('');
+  const ps=people();$('#demoPins').innerHTML=ps.map((p,i)=>`<span class="demo-origin" style="left:${p.x}%;top:${p.y}%;color:${state.page==='fair'?personIdentity(i).color:personColors[0]}">${originPin(state.page==='fair'?personIdentity(i).username:state.username)}</span>`).join('')+discovery.previews.map((s,i)=>`<button class="demo-food food-map-pin" data-preview="${i}" style="left:${15+i*16}%;top:${[28,55,36,70,25][i]}%"><span>${s.emoji}</span><small>${esc(s.name.slice(0,5))}</small></button>`).join('');
 }
 async function mountHomeMap(){
   const token=discovery.token;
@@ -70,7 +75,7 @@ function paintHomePins(fit){
   const map=discovery.map;if(!map)return;const A=window.AMap;
   if(discovery.markers.length)map.remove(discovery.markers);discovery.markers=[];
   const originMarkers=[];
-  originList().forEach((p,i)=>{if(!p.location)return;const marker=new A.Marker({position:p.location,anchor:'bottom-center',zIndex:200,content:`<div class="origin-map-pin ${state.page==='fair'&&i===state.activeOrigin?'active':''}">${originPin(p.label)}</div>`});originMarkers.push(marker);discovery.markers.push(marker);});
+  originList().forEach((p,i)=>{if(!p.location)return;const marker=new A.Marker({position:p.location,anchor:'bottom-center',offset:new A.Pixel(0,0),zIndex:200,content:`<div class="origin-map-pin ${state.page==='fair'&&i===state.activeOrigin?'active':''}" style="color:${state.page==='fair'?personIdentity(i).color:personColors[0]}">${originPin(state.page==='fair'?personIdentity(i).username:state.username)}</div>`});originMarkers.push(marker);discovery.markers.push(marker);});
   const visible=[];
   for(const store of discovery.previews){
     if(store.source!=='amap'||!DouxMap.coordinates(store.location))continue;
@@ -125,9 +130,11 @@ async function buildDemoWheel(){
 function handleDiscoveryAction(button){
   const d=button.dataset;
   if(d.locationMode){state.locationMode=d.locationMode;state.page=d.locationMode==='multi'?'fair':'near';state.activeOrigin=0;discovery.previews=[];discovery.camera=null;generate();render();$('#modal').close();if(state.page==='fair')openPeople();return true;}
-  if(d.homePerson!==undefined){state.activeOrigin=+d.homePerson;$('#originStrip').innerHTML=originChips();if(state.live)paintHomePins(false);return true;}
+  if(d.homePerson!==undefined){state.activeOrigin=+d.homePerson;$('#originStrip').innerHTML=originChips();if(state.live)paintHomePins(false);else paintDemoPins();return true;}
   if(d.preview!==undefined){const s=discovery.previews[+d.preview];if(s)detail(s);return true;}
   switch(button.id){
+    case 'editUsername':editUsername();break;
+    case 'saveUsername':{const name=$('#currentUsername').value.trim().slice(0,20);if(!name){toast('请填写用户名');break;}state.username=name;state.people[0].username=name;$('#modal').close();render();break;}
     case 'locationMode':openLocationMode();break;
     case 'homeOrigin':case 'homeSearch':openLocation(state.page==='fair'?state.activeOrigin:'near');break;
     case 'homeLocate':{
