@@ -27,3 +27,127 @@ main:has(.map-stage){padding-top:6px}main:has(.map-stage) .heading{margin-bottom
 
 /* A cheerful front door for all four everyday decisions. */
 .is-home .topbar,.is-home .sidebar{display:none}.is-home .shell{min-height:100dvh;background:#fffcf5}.is-home main{padding:0 22px 30px}.home-hub{max-width:420px;margin:auto}.hub-header{text-align:center;padding:36px 0 30px;position:relative}.hub-header h1{font-size:50px;line-height:1.15;letter-spacing:6px;padding-left:6px;color:#ee6653;font-weight:900}.hub-header p{font-size:12px;color:#8b7c71;margin-top:12px;letter-spacing:1px}.hub-flower{position:absolute;font-size:38px;color:#f2bd32;top:28px;right:calc(50% - 105px);transform:rotate(14deg)}.hub-intro{display:flex;align-items:center;justify-content:space-between;margin:0 2px 16px}.hub-intro h2{font-size:18px;letter-spacing:0;color:#5d4c45}.hub-intro>span{color:#ed8b70;font-size:24px}.hub-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.hub-card{position:relative;min-width:0;text-align:left;border-radius:28px;padding:10px 17px 25px;min-height:215px;border:2px solid #ffffffa6;box-shadow:0 5px 0 var(--card-shadow);transition:transform .18s,box-shadow .18s;overflow:hidden}.hub-card:hover{transform:translateY(-3px)}.hub-card:active{transform:translateY(3px);box-shadow:0 2px 0 var(--card-shadow)}.hub-food{background:#ffe385;--card-shadow:#edcb64;color:#765027}.hub-play{background:#a5e8c4;--card-shadow:#80cfa8;color:#286d51}.hub-travel{background:#a8dcf6;--card-shadow:#84bedf;color:#355c87}.hub-custom{background:#ddc4f5;--card-shadow:#c4a4e4;color:#74518e}.hub-art{display:block;margin:0 -5px 0;height:125px}.hub-art svg{width:100%;height:100%;display:block}.hub-card strong{display:block;font-size:23px;letter-spacing:1px;font-weight:900;margin-top:2px}.hub-description{display:block;font-size:10px;line-height:1.6;margin-top:6px;white-space:nowrap}.hub-arrow{position:absolute;right:14px;bottom:47px;width:24px;height:24px;display:grid;place-items:center;background:#ffffff85;border-radius:50%;font-size:17px}.hub-description{padding-right:8px}.hub-card strong{padding-right:24px}.hub-footer{text-align:center;margin-top:30px;font-size:12px;color:#968674;letter-spacing:.5px}.hub-footer span{font-size:19px;color:#efad38;vertical-align:-2px;margin-right:5px}.home-back{font-size:28px;padding:0;min-width:26px;min-height:40px;color:#86728a}.coming-soon{text-align:center}.coming-soon>span{display:block;font-size:60px;color:#eda62e;padding:8px}.coming-soon p{font-size:14px;color:var(--muted);line-height:1.9;margin:12px 0 22px}@media(max-width:375px){.is-home main{padding:0 18px 24px}.hub-header{padding:30px 0 25px}.hub-card{min-height:196px;padding:8px 13px 23px;border-radius:24px}.hub-art{height:110px}.hub-grid{gap:14px}.hub-card strong{font-size:22px}.hub-description{font-size:9px}.hub-arrow{right:10px;bottom:43px;width:22px;height:22px}.hub-header h1{font-size:46px}.hub-intro h2{font-size:17px}}
+/* ===== 手机屏幕适配：安全区、短屏、触控目标与 iOS 表单 ===== */
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%;scroll-padding-bottom:calc(112px + env(safe-area-inset-bottom,0px))}
+/* 刘海屏与底部横条：viewport-fit=cover 后按安全区留白 */
+.topbar{height:calc(68px + env(safe-area-inset-top,0px));padding-top:env(safe-area-inset-top,0px)}
+.shell{min-height:calc(100vh - 68px);min-height:calc(100dvh - 68px - env(safe-area-inset-top,0px))}
+main{padding-bottom:calc(108px + env(safe-area-inset-bottom,0px))}
+.is-home main{padding-top:env(safe-area-inset-top,0px);padding-bottom:calc(30px + env(safe-area-inset-bottom,0px))}
+#toast{bottom:calc(94px + env(safe-area-inset-bottom,0px))}
+dialog{max-height:90vh;max-height:90dvh}
+@media(max-width:500px){dialog{max-height:92vh;max-height:92dvh}}
+/* 触屏设备：表单控件 16px，避免 iOS Safari 聚焦时自动放大；顺带放大偏小的点击目标 */
+@media (hover:none),(pointer:coarse){
+  input:not([type=checkbox]):not([type=radio]):not([type=range]),select,textarea{font-size:16px}
+  .person select,.person-username input{font-size:16px}
+  .person select{padding:8px 6px}
+  .person-username span{white-space:nowrap;font-size:10px;flex-shrink:0}
+  .person>button:last-child{min-height:40px}
+  .record-form input,.record-form select,.record-form textarea{font-size:16px}
+  .home-back{min-width:40px;min-height:44px}
+  .topbar>.quiet{width:40px;min-height:40px}
+  .demo-label{display:inline-flex;align-items:center;min-height:38px;padding:8px 10px}
+  .quiet{min-height:44px}
+  .mode-button,.preference-button{display:flex;align-items:center;min-height:44px}
+  .map-search-button button{min-height:40px}
+  .chip{min-height:44px}
+  .close{min-width:44px;min-height:44px}
+  .btn.small{min-height:44px}
+  .fold summary{min-height:44px;padding:6px 0}
+  .odds-pill{display:inline-flex;align-items:center;min-height:36px}
+  .origin-chip{min-height:40px}
+  .origin-edit{min-height:40px}
+  .refresh-entry{min-height:48px}
+}
+@media (max-width:375px){
+  .topbar{padding:env(safe-area-inset-top,0px) 14px 0;gap:8px}
+  .brand b{font-size:20px}
+  .person{grid-template-columns:22px minmax(0,1fr) minmax(0,1fr) 22px}
+}
+/* 短屏（约 720px 高以下，含 iPhone SE 与老款 Android）：压缩装饰，让主按钮留在首屏 */
+@media (max-height:720px) and (max-width:500px){
+  .topbar{height:calc(60px + env(safe-area-inset-top,0px))}
+  .shell{min-height:calc(100vh - 60px);min-height:calc(100dvh - 60px - env(safe-area-inset-top,0px))}
+  main{padding-top:8px;padding-bottom:calc(104px + env(safe-area-inset-bottom,0px))}
+  main:has(.map-stage){padding-top:4px}
+  .heading{margin-bottom:10px}
+  main:has(.map-stage) .heading{margin-bottom:8px}
+  .heading h1{font-size:23px}
+  main:has(.map-stage) .heading h1{font-size:21px}
+  .heading p{font-size:11px;margin-top:4px;line-height:1.5}
+  main:has(.map-stage) .heading p{font-size:10px;margin-top:3px}
+  .icon-burst,main:has(.map-stage) .icon-burst{font-size:24px}
+  .discovery-toolbar{margin-bottom:8px}
+  .map-stage{height:clamp(230px,36dvh,300px)}
+  .build-wheel{min-height:46px;font-size:15px}
+  .generation-note{margin-top:8px}
+  .step-nav{margin-bottom:12px}
+  .step-nav button{min-height:40px;padding:9px 12px}
+  .wheel-wrap{width:min(74%,214px);margin:10px auto 12px}
+  .hub{font-size:24px;inset:35%}
+  .wheel-header{padding:13px 14px 0}
+  .wheel-actions{padding:0 16px 7px}
+  .wheel-actions .btn{min-height:46px}
+  .wheel-status{margin-top:7px}
+  .wheel-footer{min-height:38px;padding:3px 14px}
+  .under-wheel{margin-top:12px;gap:8px}
+  .hub-header{padding:20px 0 14px}
+  .hub-header h1{font-size:40px}
+  .hub-header p{margin-top:7px}
+  .hub-intro{margin-bottom:10px}
+  .hub-grid{gap:12px}
+  .hub-card{min-height:168px;padding:7px 13px 16px}
+  .hub-art{height:92px}
+  .hub-card strong{font-size:20px;margin-top:0}
+  .hub-description{font-size:9px;margin-top:4px}
+  .hub-arrow{bottom:36px;right:10px;width:22px;height:22px;font-size:15px}
+}
+/* 更矮的屏幕（约 600px 高以下，含 320×568）：进一步压缩地图与转盘 */
+@media (max-height:600px) and (max-width:500px){
+  .topbar{height:calc(54px + env(safe-area-inset-top,0px))}
+  .shell{min-height:calc(100vh - 54px);min-height:calc(100dvh - 54px - env(safe-area-inset-top,0px))}
+  .map-stage{height:clamp(160px,32dvh,210px)}
+  .wheel-wrap{width:min(62%,178px);margin:6px auto 8px}
+  .hub{font-size:20px;inset:33%}
+  .hub small{font-size:8px;margin-top:1px}
+  .wheel-header{padding:10px 14px 0}
+  .wheel-actions{padding:0 14px 4px}
+  .wheel-actions .btn{min-height:44px}
+  .wheel-status{margin-top:4px;min-height:14px}
+  .step-nav{margin-bottom:8px}
+  .step-nav button{min-height:38px}
+  .heading h1{font-size:20px}
+  main:has(.map-stage) .heading h1{font-size:20px}
+  .heading p{font-size:10px}
+  .hub-header{padding:14px 0 10px}
+  .hub-header h1{font-size:34px}
+  .hub-card{min-height:150px}
+  .hub-art{height:78px}
+}
+/* 横屏手机：底部导航改为横向紧凑条，压低顶部与地图高度 */
+@media (orientation:landscape) and (max-height:500px){
+  .sidebar{padding:6px 10px calc(6px + env(safe-area-inset-bottom,0px))}
+  .nav-item{flex-direction:row;gap:8px;min-height:44px;font-size:12px}
+  .nav-item span{font-size:18px;line-height:20px}
+  .topbar{height:calc(54px + env(safe-area-inset-top,0px))}
+  .shell{min-height:calc(100vh - 54px);min-height:calc(100dvh - 54px - env(safe-area-inset-top,0px))}
+  .heading{margin-bottom:8px}
+  .heading h1{font-size:21px}
+  .heading p{font-size:11px;margin-top:3px}
+  .map-stage{height:clamp(170px,44dvh,230px)}
+  .wheel-wrap{width:min(50%,170px);margin:6px auto 8px}
+  .hub{font-size:20px;inset:33%}
+  .hub small{font-size:8px;margin-top:1px}
+  .wheel-actions .btn{min-height:44px}
+  .is-home main{padding:env(safe-area-inset-top,0px) 18px calc(16px + env(safe-area-inset-bottom,0px))}
+  .hub-header{padding:10px 0 8px}
+  .hub-header h1{font-size:34px}
+  .hub-header p{margin-top:4px}
+  .hub-intro{margin-bottom:8px}
+  .hub-grid{gap:10px}
+  .hub-card{min-height:128px;padding:6px 12px 12px}
+  .hub-art{height:64px}
+  .hub-card strong{font-size:18px}
+  .hub-arrow{bottom:28px}
+}
