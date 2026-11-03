@@ -20,7 +20,7 @@ function renderDiscovery(){
     return;
   }
   const group=state.page==='fair',c=state.config;
-  $('#view').innerHTML=((state.activity==='play')?heading('先找好玩的，再交给好运。','这一场，让好运帮你选。'):heading('先找美味，再交给好运。','这一餐，让好运帮你选。'))+`<div class="discovery-toolbar">${(state.activity==='play')?'<span class="mode-button" role="status">📍 单人定位</span>':`<button id="locationMode" class="mode-button">${group?'👫 多人定位':'📍 单人定位'} <span>⌄</span></button>`}<button id="openFilters" class="preference-button">${modeIcon(c.mode)} ${group?'各自的路程':c.mode+' '+c.limit+'分钟'} · ${c.types.length?esc(c.types.join('/')):((state.activity==='play')?'玩什么都行':'口味都行')} <span>筛选</span></button></div>
+  $('#view').innerHTML=((state.activity==='play')?heading('先找好玩的，再交给好运。','这一场，让好运帮你选。'):heading('先找美味，再交给好运。','这一餐，让好运帮你选。'))+`<div class="discovery-toolbar">${(state.activity==='play')?'<span class="mode-button" role="status">📍 单人定位</span>':`<button id="locationMode" class="mode-button">${group?'👫 多人定位':'📍 单人定位'}</button>`}<button id="openFilters" class="preference-button">${modeIcon(c.mode)} ${group?'各自的路程':c.mode+' '+c.limit+'分钟'} · ${c.types.length?esc(c.types.join('/')):((state.activity==='play')?'玩什么都行':'口味都行')} <span>筛选</span></button></div>
   <section class="map-stage"><div class="map-search-button"><button id="homeSearch">⌕ 搜索城市、地铁站、商圈</button><button id="homeLocate" aria-label="使用当前位置">⌖</button></div>
     ${state.live?'<div id="homeMap" aria-label="美食地图，点击选择出发点"></div><div id="homeMapLoading" class="home-map-loading">🗺️ 正在打开地图…</div>':demoHomeMap()}
   </section>
