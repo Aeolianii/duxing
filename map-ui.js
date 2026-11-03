@@ -138,7 +138,7 @@ async function prepareDetails(store,delay){
 }
 async function prepareMerchantDetails(store,delay){
   if(store.source!=='amap'){if(!store.manual)await new Promise(resolve=>setTimeout(resolve,delay));return true;}
-  const key=JSON.stringify([store.poiId,store.poiName||store.name,store.address]);
+  const key=JSON.stringify([store.poiId,store.poiName||store.name,store.address,store.activity==='play'?'play':'food']);
   const hit=detailCache.get(key);
   if(hit&&Date.now()-Date.parse(hit.ai?.retrievedAt)<900000){Object.assign(store,hit);return true;}
   if(detailTasks.has(key)){const result=await detailTasks.get(key);Object.assign(store,result);return result.ai?.status!=='error';}

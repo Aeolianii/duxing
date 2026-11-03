@@ -5,7 +5,7 @@ const {createClient}=require('./ai-client.js');
 const {createServer}=require('./server.cjs');
 const store={id:'amap-A',source:'amap',poiId:'A',name:'测试餐厅(南门店)',city:'广州市',address:'广州市南门路1号',category:'粤菜'};
 const source={title:store.name,url:'https://example.com/branch-a',summary:'测试餐厅(南门店)位于广州市南门路1号，主营粤菜。'};
-const model={matched:true,introduction:'这是一家粤菜餐厅。',reviewSummary:'暂无评价。',citations:[{index:0,quote:'主营粤菜'}]};
+const model={matched:true,introduction:'这是一家粤菜餐厅。',selectionReason:'这家南门店主营粤菜，如果今天想尝试粤菜，可以把它作为这次用餐的一个选择。',reviewSummary:'暂无评价。',citations:[{index:0,quote:'主营粤菜'}]};
 const json=value=>new Response(JSON.stringify(value),{headers:{'Content-Type':'application/json'}});
 const deferred=()=>{let resolve;const promise=new Promise(r=>resolve=r);return {promise,resolve};};
 const tick=()=>new Promise(r=>setTimeout(r,5));
@@ -20,6 +20,7 @@ test('每店先搜索再整理，固定模型、真实来源、去重缓存且�
   const input={...store,origin:{location:[113,23]},visits:['私人反馈'],phone:'private-phone'};
   const [a,b]=await Promise.all([research(input),research(input)]);
   assert.deepEqual(a,b);assert.equal(a.status,'ready');assert.equal(a.evidence[0].url,source.url);
+  assert.equal(a.selectionReason,model.selectionReason);
   assert.equal(calls.length,2);assert.ok(calls[0].url.endsWith('/v1/tools/search'));
   assert.equal(calls[1].body.model,'deepseek-flash');assert.equal(calls[1].body.thinking.type,'disabled');
   assert.doesNotMatch(JSON.stringify(calls),/私人|private-phone|origin|location/);
@@ -31,8 +32,21 @@ test('空搜索不调用模型，非同店或伪造来源不当作可靠资料',
   for(const output of [null,{...model,matched:false},{...model,citations:[{index:0,quote:'编造的证据'}]}]){
     let calls=0;
     const research=createResearch({config:{deepseekKey:'test'},fetcher:async url=>{calls++;return json(url.endsWith('/search')?{results:output?[source]:[]}:{choices:[{finish_reason:'stop',message:{content:JSON.stringify(output)}}]});}});
-    const result=await research(store);assert.equal(result.status,'empty');assert.deepEqual(result.evidence,[]);assert.equal(calls,output?2:1);
+    const result=await research(store);assert.equal(result.status,'empty');assert.equal(result.selectionReason,'');assert.deepEqual(result.evidence,[]);assert.equal(calls,output?2:1);
   }
+});
+
+test('美食与游玩分别生成解读且缓存不会混用活动模式',async()=>{
+  const activities=[];
+  const research=createResearch({config:{deepseekKey:'test'},fetcher:async(url,options)=>{
+    if(url.endsWith('/search'))return json({results:[source]});
+    const body=JSON.parse(options.body),activity=JSON.parse(body.messages[1].content).store.activity;
+    activities.push(activity);
+    return json({choices:[{finish_reason:'stop',message:{content:JSON.stringify({...model,selectionReason:activity==='play'?'游玩场馆解读':'美食门店解读'})}}]});
+  }});
+  assert.equal((await research({...store,activity:'food'})).selectionReason,'美食门店解读');
+  assert.equal((await research({...store,activity:'play'})).selectionReason,'游玩场馆解读');
+  await research({...store,activity:'play'});assert.deepEqual(activities,['food','play']);
 });
 
 test('API 失败不泄露上游内容，错误可重试且不缓存',async()=>{
@@ -119,4 +133,18 @@ test('详情卡片区分缺失商业数据、缺少起点和路线错误，并�
   assert.match(h.context.statsHTML({source:'amap',routeStatus:'error'}),/路线获取失败/);
   const html=h.context.statsHTML({source:'amap',rating:4.8,price:90,max:12,routeStatus:'ready',routeMode:'步行'});
   for(const value of ['4.8','¥90','12 分钟','步行'])assert.ok(html.includes(value));
+});
+
+
+test('结果理由展示真实 AI 段落、转义内容，并随当前路程变化更新',()=>{
+  const h=harness(async()=>true);
+  const food={...store,routeStatus:'ready',routeMode:'步行',times:[8],max:8,ai:{status:'ready',selectionReason:'可以试试这家粤菜馆，<script>不能执行</script>。'}};
+  let html=h.context.selectionReasonHTML(food);
+  assert.match(html,/AI 解读/);assert.match(html,/可以试试这家粤菜馆/);assert.ok(!html.includes('<script>'));assert.match(html,/步行约 8 分钟/);
+  food.max=12;html=h.context.selectionReasonHTML(food);assert.match(html,/步行约 12 分钟/);assert.doesNotMatch(html,/8 分钟/);
+  assert.match(h.context.selectionReasonHTML({...food,activity:'play',ai:{status:'ready',selectionReason:'可以去这家场馆体验桌游。'}}),/体验桌游/);
+  assert.match(h.context.selectionReasonHTML({...food,ai:{status:'loading'}}),/正在结合公开资料/);
+  assert.match(h.context.selectionReasonHTML({...food,ai:{status:'error'}}),/重试资料/);
+  assert.match(h.context.selectionReasonHTML({...food,ai:{status:'empty',selectionReason:'不能采用的无证据解读'}}),/可靠资料有限/);
+  assert.doesNotMatch(h.context.selectionReasonHTML({...food,ai:{status:'empty',selectionReason:'不能采用的无证据解读'}}),/不能采用/);
 });

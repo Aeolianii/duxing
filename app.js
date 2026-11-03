@@ -100,13 +100,29 @@ function aiHTML(s){
   if(ai.status==='error')return `<p class="muted">${esc(ai.error)}</p><button class="btn secondary small" id="retryAI">重试资料</button>`;
   return `<b>AI 整理 · ${esc(ai.model)}</b><p class="detail-copy">${esc(ai.introduction||'暂无可核实的同店介绍。')}</p><p class="detail-copy">${esc(ai.reviewSummary)}</p><p class="muted">基于搜索摘要，资料有限；请核对具体分店。检索时间：${esc(new Date(ai.retrievedAt).toLocaleString('zh-CN'))}</p><div class="section-list">${(ai.evidence||[]).map(e=>`<a href="${esc(e.url)}" target="_blank" rel="noopener noreferrer">${esc(e.title||'查看来源')} ↗</a>`).join('')}</div>`;
 }
-function updateAI(s){const el=$('#aiDetails');if(el&&el.dataset.store===s.id&&$('#modal').open)el.innerHTML=aiHTML(s)}
+function updateAI(s){updateSelectionReason(s);const el=$('#aiDetails');if(el&&el.dataset.store===s.id&&$('#modal').open)el.innerHTML=aiHTML(s)}
 async function retryAI(){
   const s=state.last;if(!s||s.ai?.status==='loading')return;
   state.bg++;const token=state.bg;s.ai={status:'loading'};updateAI(s);
   await prepareDetails(s,0);
   if(token===state.bg&&state.last?.id===s.id)updateAI(s);
 }
+function selectionReasonHTML(s){
+  const play=s.activity==='play',ai=s.ai;
+  const generated=ai?.status==='ready'&&typeof ai.selectionReason==='string'&&ai.selectionReason.trim();
+  const name=s.poiName||s.name;
+  let copy=generated;
+  if(!copy){
+    if(s.manual)copy=`这是你亲自加入的选项「${name}」，这次由转盘随机抽中。尚未关联真实${play?'场馆':'门店'}，出发前记得确认具体地点。`;
+    else if(s.source!=='amap')copy=`${s.intro||name}。这是演示候选，本轮随机抽中它，让今天的${play?'玩乐':'用餐'}多一点惊喜。`;
+    else copy=`这次转盘随机抽中了「${name}」。${ai?.status==='loading'?'AI 正在结合公开资料整理它的特色，稍后会补充在这里。':ai?.status==='error'?'AI 解读暂时未获取，可在下方重试资料。':'目前可靠资料有限，可以先核对地址和路线，再决定是否出发。'}`;
+  }
+  const facts=[];
+  if(s.source==='amap'&&s.routeStatus==='ready'&&Number.isFinite(s.max))facts.push(`${s.times?.length>1?'各人最长路程':s.routeMode||'预计路程'}约 ${s.max} 分钟`);
+  if(s.source==='amap'&&state.config.budget&&Number.isFinite(s.price))facts.push(s.price<=state.config.budget?`高德参考人均 ¥${s.price}，在当前预算内`:`高德参考人均 ¥${s.price}，超过当前预算，请再确认`);
+  return `<b>💡 为什么选它${generated?' · AI 解读':''}</b><p id="storeReason">${esc(copy)}</p>${facts.length?`<p class="muted">${esc(facts.join('；'))}。</p>`:''}`;
+}
+function updateSelectionReason(s){const el=$('#storeReasonBox');if(el&&el.dataset.store===s.id&&$('#modal').open)el.innerHTML=selectionReasonHTML(s)}
 function statsHTML(s){
   const live=s.source==='amap';
   const missing=s.manual?'未关联门店':s.detailError?'资料获取失败':'高德未提供';
@@ -114,7 +130,7 @@ function statsHTML(s){
   const route=routeMissing[s.routeStatus]||(Number.isFinite(s.max)?s.max+' 分钟':'尚未计算');
   return `<div class="stat"><strong class="${s.rating?"":"stat-note"}">${esc(s.rating||missing)}</strong><small>${live?'高德评分':'演示评分'}</small></div><div class="stat"><strong class="${s.price==null?"stat-note":""}">${esc(s.price==null?missing:'¥'+s.price)}</strong><small>参考人均</small></div><div class="stat"><strong class="${routeMissing[s.routeStatus]||!Number.isFinite(s.max)?"stat-note":""}">${esc(route)}</strong><small>${live?(s.times?.length>1?'多人最长路程':s.routeMode||'预计路程'):'模拟路程'}</small></div>${live?`<button class="quiet" id="refreshStoreRoute">${s.routeStatus==='missing-origin'?'选择出发点':s.routeStatus==='error'?'重试路线':'刷新路程'}</button>`:''}`;
 }
-function updateStats(s){const el=$('#storeStats');if(el&&el.dataset.store===s.id&&$('#modal').open){el.innerHTML=statsHTML(s);const reason=$('#storeReason');if(reason)reason.textContent=reasons(s)}}
+function updateStats(s){const el=$('#storeStats');if(el&&el.dataset.store===s.id&&$('#modal').open){el.innerHTML=statsHTML(s);updateSelectionReason(s)}}
 async function refreshStoreRoute(){
   const s=state.last;if(!s||s.source!=='amap')return;
   if(!state.live||realOrigins().some(p=>!p.location)){openLocation(state.page==='fair'?0:'near');return;}
@@ -124,7 +140,7 @@ function detail(s,won=false){
   state.bg++;state.last=s;const live=s.source==='amap',play=s.activity==='play',f=state.favorites.some(x=>x.id===s.id);
   if(live&&typeof ensureStoreRoute==='function')ensureStoreRoute(s).then(()=>updateStats(s));
   const photo=live&&s.photos?.[0];
-  showModal(modalTop(won?(play?'🎉 今天，就去这里！':'🎉 今天，就吃这家！'):'这家怎么样？')+`<div class="food-art result-art ${photo?'has-photo':''}" style="background:${s.color||'#ffe8aa'}">${photo?`<img src="${esc(photo)}" alt="${esc(s.name)}的商户图片" referrerpolicy="no-referrer">`:`<span>${s.emoji||'🍽️'}</span>`}<small>${photo?'高德提供的图片':live?'暂无商户图片 · 示意插画':play?'场馆示意插画':'餐饮示意插画'}</small></div><div class="result-title"><h2>${esc(s.name)}</h2><button class="btn outline small" data-fav="${s.id}">${f?'♥ 已收藏':'♡ 收藏'}</button></div><p class="muted">${esc(s.address||'自定义候选 · 未关联门店')}</p><div class="result-stats" id="storeStats" data-store="${esc(s.id)}" aria-live="polite">${statsHTML(s)}</div><div class="reason-box"><b>💡 为什么选它</b><p id="storeReason">${esc(reasons(s))}</p></div>
+  showModal(modalTop(won?(play?'🎉 今天，就去这里！':'🎉 今天，就吃这家！'):'这家怎么样？')+`<div class="food-art result-art ${photo?'has-photo':''}" style="background:${s.color||'#ffe8aa'}">${photo?`<img src="${esc(photo)}" alt="${esc(s.name)}的商户图片" referrerpolicy="no-referrer">`:`<span>${s.emoji||'🍽️'}</span>`}<small>${photo?'高德提供的图片':live?'暂无商户图片 · 示意插画':play?'场馆示意插画':'餐饮示意插画'}</small></div><div class="result-title"><h2>${esc(s.name)}</h2><button class="btn outline small" data-fav="${s.id}">${f?'♥ 已收藏':'♡ 收藏'}</button></div><p class="muted">${esc(s.address||'自定义候选 · 未关联门店')}</p><div class="result-stats" id="storeStats" data-store="${esc(s.id)}" aria-live="polite">${statsHTML(s)}</div><div class="reason-box" id="storeReasonBox" data-store="${esc(s.id)}" aria-live="polite">${selectionReasonHTML(s)}</div>
   <details class="fold"><summary>${play?'场馆介绍与资料来源':'餐厅介绍与资料来源'}</summary><p class="detail-copy">${live?esc(s.category||s.type)+'。'+(s.phone?'联系电话：'+esc(s.phone)+'。':'')+'信息来自高德 POI；未返回的评分、图片与价格保留为空。出发前请确认场次与营业情况。':s.manual?'你手动加入的选项，尚未关联真实门店。':esc(s.intro)+'。'+(play?'场馆、评分、地址与资料整理过程均为演示。':'商户、评分、地址与资料整理过程均为演示。')}</p>${s.times&&state.page==='fair'?`<p>${s.times.map((t,i)=>`${String.fromCharCode(65+i)} 约 ${t} 分钟`).join(' / ')}</p>`:''}<p id="bgStatus" class="muted">${s.detailError?'详细资料暂未获取，已保留基础信息。':won?'随后准备其余候选资料。':''}</p></details>
   ${live?`<section id="aiDetails" data-store="${esc(s.id)}" class="intro-box" aria-live="polite">${aiHTML(s)}</section>`:""}
   <div class="actions result-actions"><button class="btn" id="route" ${s.manual?'disabled':''}>${live?'在高德查看':'看看路线'} ↗</button><button class="btn outline" id="again">再转一次</button></div><div class="actions utility-actions"><button id="share">🎀 分享卡片</button><button id="record">📝 ${play?'记下这次':'记下这顿'}</button></div><details class="fold"><summary>${play?'不太想去？换个条件':'不太想吃？换个条件'}</summary><div class="actions"><button class="chip" id="reject">本轮排除</button><button class="chip" data-adjust="limit">近一点</button><button class="chip" data-adjust="budget">便宜一点</button><button class="chip" data-adjust="type">${play?'换一类':'换口味'}</button></div></details>`);

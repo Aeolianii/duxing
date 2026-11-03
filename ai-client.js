@@ -3,7 +3,7 @@
   function createClient(fetcher, now=Date.now) {
     const cache=new Map(),pending=new Map();
     function payload(store) {
-      return {source:store.source,poiId:store.poiId,name:store.poiName||store.name,city:store.city,address:store.address,category:store.category||store.type};
+      return {source:store.source,activity:store.activity==='play'?'play':'food',poiId:store.poiId,name:store.poiName||store.name,city:store.city,address:store.address,category:store.category||store.type};
     }
     function research(store) {
       if(store.manual||store.source!=='amap')return Promise.resolve(null);
