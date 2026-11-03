@@ -148,3 +148,22 @@ test('结果理由展示真实 AI 段落、转义内容，并随当前路程变�
   assert.match(h.context.selectionReasonHTML({...food,ai:{status:'empty',selectionReason:'不能采用的无证据解读'}}),/可靠资料有限/);
   assert.doesNotMatch(h.context.selectionReasonHTML({...food,ai:{status:'empty',selectionReason:'不能采用的无证据解读'}}),/不能采用/);
 });
+
+test('通用转盘仅发送中奖名称，检索摘要后生成带来源的简要介绍',async()=>{
+  const calls=[],summary='广州塔是广州的城市地标，可欣赏城市景观。';
+  const server=createServer({config:{deepseekKey:'test'},fetcher:async(url,options)=>{
+    const body=JSON.parse(options.body);calls.push(body);
+    return json(url.endsWith('/search')?{results:[{title:'广州塔',url:'https://example.com/tower',summary}]}:{choices:[{finish_reason:'stop',message:{content:JSON.stringify({matched:true,introduction:summary,citations:[{index:0,quote:'广州塔是广州的城市地标'}]})}}]});
+  }});
+  await new Promise(r=>server.listen(0,'127.0.0.1',r));
+  const base='http://127.0.0.1:'+server.address().port;
+  const post=body=>fetch(base+'/api/option-research',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  try{
+    assert.equal((await post({name:'  '})).status,400);
+    const result=await (await post({name:'广州塔',origin:'private-origin',candidates:['private-other-option']})).json();
+    assert.equal(result.status,'ready');assert.equal(result.introduction,summary);assert.equal(result.evidence.length,1);
+    assert.doesNotMatch(JSON.stringify(calls),/private-origin|private-other-option/);
+    assert.equal(JSON.parse(calls[1].messages[1].content).store.source,'custom');
+    await post({name:'广州塔'});assert.equal(calls.length,2);
+  }finally{await new Promise(r=>server.close(r));}
+});

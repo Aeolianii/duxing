@@ -15,8 +15,8 @@ function loadConfig(root = __dirname) {
 }
 
 function createServer({config = loadConfig(), fetcher = fetch} = {}) {
-  const research=createResearch({config,fetcher});
-  const files = new Set(['index.html', 'style.css', 'app.js', 'core.js', 'amap-client.js', 'map-ui.js', 'discovery.js', 'ai-client.js']);
+  const research=createResearch({config,fetcher}),optionResearch=createResearch({config,fetcher,allowOptions:true});
+  const files = new Set(['index.html', 'style.css', 'app.js', 'core.js', 'amap-client.js', 'map-ui.js', 'discovery.js', 'ai-client.js', 'freewheel.js']);
   const types = {'.html':'text/html; charset=utf-8', '.js':'application/javascript; charset=utf-8', '.css':'text/css; charset=utf-8'};
   return http.createServer(async (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
@@ -28,7 +28,7 @@ function createServer({config = loadConfig(), fetcher = fetch} = {}) {
     if (req.headers.origin && req.headers.origin !== `http://${req.headers.host}`) return json(403, {error:'不允许跨站请求'});
     let url;
     try { url = new URL(req.url, 'http://localhost'); } catch { return json(400, {error:'请求地址无效'}); }
-    if (url.pathname === '/api/store-research' && req.method === 'POST') {
+    if (['/api/store-research','/api/option-research'].includes(url.pathname) && req.method === 'POST') {
       if (!/^application\/json(?:;|$)/i.test(req.headers['content-type'] || '')) return json(415,{error:'请使用 JSON 请求'});
       try {
         const chunks=[];let size=0;
@@ -39,7 +39,7 @@ function createServer({config = loadConfig(), fetcher = fetch} = {}) {
         }
         let input;
         try { input=JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch { return json(400,{error:'JSON 格式无效'}); }
-        return json(200,await research(input));
+        return json(200,await (url.pathname==='/api/option-research'?optionResearch:research)(input));
       } catch(error) { return json(error.status || 502,{error:error.status?error.message:'资料检索暂时失败，请重试'}); }
     }
     if (req.method !== 'GET') return json(405, {error:'不支持的请求方法'});

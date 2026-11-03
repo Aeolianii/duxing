@@ -229,7 +229,7 @@ function handleCompactAction(button){
   }
   return true;
 }
-function updateSource(){document.querySelector('.demo-label').innerHTML='<i></i> '+(state.live?'高德模式':'演示模式');}
+function updateSource(){const label=document.querySelector('.demo-label');if(label)label.innerHTML='<i></i> '+(state.live?'高德模式':'演示模式');}
 document.addEventListener('keydown',event=>{if(event.key==='Enter'&&event.target.id==='mapSearch'){event.preventDefault();searchMap();}});
 $('#modal').addEventListener('close',()=>{if(!$('#modal').open)disposeMap();});
 generate();render();
