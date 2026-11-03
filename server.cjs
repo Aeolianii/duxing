@@ -14,7 +14,7 @@ function loadConfig(root = __dirname) {
 }
 
 function createServer({config = loadConfig(), fetcher = fetch} = {}) {
-  const files = new Set(['index.html', 'style.css', 'app.js', 'core.js', 'amap-client.js', 'map-ui.js']);
+  const files = new Set(['index.html', 'style.css', 'app.js', 'core.js', 'amap-client.js', 'map-ui.js', 'discovery.js']);
   const types = {'.html':'text/html; charset=utf-8', '.js':'application/javascript; charset=utf-8', '.css':'text/css; charset=utf-8'};
   return http.createServer(async (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
@@ -35,13 +35,19 @@ function createServer({config = loadConfig(), fetcher = fetch} = {}) {
       if (!/^\/v[345]\/[a-zA-Z0-9_/-]+$/.test(targetPath)) return json(403, {error:'不支持的地图服务路径'});
       const target = new URL(targetPath, 'https://restapi.amap.com');
       target.search = url.search;
+      const callback=target.searchParams.get('callback');
+      if(callback&&!/^[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*$/.test(callback)) return json(400,{error:'无效的回调名称'});
       target.searchParams.set('key', config.key);
       target.searchParams.set('jscode', config.security);
       try {
         const upstream = await fetcher(target, {signal:AbortSignal.timeout(15000), redirect:'error'});
         const content = await upstream.text();
+        const diagnostic=content.match(/"info"\s*:\s*"([A-Z_]+)"/);
+        if(diagnostic&&diagnostic[1]!=='OK') console.warn('AMap service:',targetPath,diagnostic[1]);
         const safe = content.split(config.security).join('[redacted]');
-        res.writeHead(upstream.status, {'Content-Type':upstream.headers.get('content-type') || 'application/json; charset=utf-8'});
+        // AMap returns JSONP with application/json. With nosniff, the browser
+        // refuses to execute it unless the proxy sends the JavaScript MIME type.
+        res.writeHead(upstream.status, {'Content-Type':callback?'application/javascript; charset=utf-8':upstream.headers.get('content-type') || 'application/json; charset=utf-8'});
         return res.end(safe);
       } catch { return json(502, {error:'高德服务暂时不可用，请稍后重试'}); }
     }

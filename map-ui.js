@@ -9,11 +9,12 @@ function openCandidates(){showModal(modalTop('🍽️ 本轮的美味候选')+`<
 function openCustom(){showModal(modalTop('🍱 我的心愿餐厅')+customPanel()+(state.mapConfigured?'<button class="btn full" id="searchCustom">在高德查找餐厅</button>':''));}
 function openPeople(){
   if(!state.live){showModal(modalTop('👫 饭搭子从哪出发？')+fairPanel());return;}
-  showModal(modalTop('👫 饭搭子从哪出发？')+`<p class="muted">分别选好出发点，我们再比较真实路线。</p><div class="people">${state.people.map((p,i)=>`<div class="person live-person"><b>${String.fromCharCode(65+i)}</b><button class="person-place" data-select-person="${i}">${esc(p.origin?.name||'选择出发点')} ›</button><select aria-label="成员${i+1}出行方式" data-person="${i}" data-key="mode">${['步行','驾车'].map(t=>`<option ${t===p.mode?'selected':''}>${t}</option>`).join('')}</select><select aria-label="成员${i+1}时间限制" data-person="${i}" data-key="limit">${[10,15,20,30,45,60].map(n=>`<option value="${n}" ${n===p.limit?'selected':''}>${n}分钟</option>`).join('')}</select><button data-remove-person="${i}" aria-label="移除成员${i+1}" ${state.people.length<=2?'disabled':''}>×</button></div>`).join('')}</div><div class="actions"><button class="btn secondary" id="addPerson" ${state.people.length>=6?'disabled':''}>＋ 加一位</button><button class="btn" id="applyFilters">选好了，找餐厅</button></div><details class="fold"><summary>怎么照顾每个人的路程？</summary><p class="muted">先满足所有人的时间限制，再按最长路程、时间差、总时间排序。仅比较这次检索到的店，入选后等概率抽取。</p></details>`);
+  showModal(modalTop('👫 饭搭子从哪出发？')+`<p class="muted">分别选好出发点，我们再比较真实路线。</p><div class="people">${state.people.map((p,i)=>`<div class="person live-person"><b>${String.fromCharCode(65+i)}</b><button class="person-place" data-select-person="${i}">${esc(p.origin?.name||'选择出发点')} ›</button><select aria-label="成员${i+1}出行方式" data-person="${i}" data-key="mode">${['步行','公共交通','驾车'].map(t=>`<option ${t===p.mode?'selected':''}>${t}</option>`).join('')}</select><select aria-label="成员${i+1}时间限制" data-person="${i}" data-key="limit">${[10,15,20,30,45,60].map(n=>`<option value="${n}" ${n===p.limit?'selected':''}>${n}分钟</option>`).join('')}</select><button data-remove-person="${i}" aria-label="移除成员${i+1}" ${state.people.length<=2?'disabled':''}>×</button></div>`).join('')}</div><div class="actions"><button class="btn secondary" id="addPerson" ${state.people.length>=6?'disabled':''}>＋ 加一位</button><button class="btn" id="applyFilters">确认这些出发点</button></div><details class="fold"><summary>怎么照顾每个人的路程？</summary><p class="muted">先满足所有人的时间限制，再按最长路程、时间差、总时间排序。仅比较这次检索到的店，入选后等概率抽取。</p></details>`);
 }
 function setupSheet(){showModal(modalTop('🗺️ 高德地图设置')+`<div class="setup-art">🗺️<span>让美味，离你近一点</span></div><p class="detail-copy">${state.mapConfigured?'本地已检测到配置。真实地图可搜索、拖动选点并获取附近餐厅。':'还没有 Key 也可以继续体验转盘。申请后填入本地配置，就能查找真实的附近餐厅。'}</p><ol class="setup-steps"><li>打开高德开放平台，登录并创建应用。</li><li>添加 <b>Web端（JS API）</b> Key，取得 Key 和安全密钥。</li><li>将 demo 中的 <b>.env.example</b> 复制为 <b>.env</b>，填写两个值；关闭旧服务再启动。</li></ol><p class="muted">密钥只填在自己的电脑上，不用发到聊天里。控制台如要求白名单，配置本地访问域名。</p><a class="btn full" href="https://console.amap.com/dev/key/app" target="_blank" rel="noopener noreferrer">前往高德控制台 ↗</a>${state.mapConfigured?`<button class="btn secondary full sheet-note" id="toggleMapMode">${state.live?'切换到演示体验':'使用真实高德数据'}</button>`:''}<details class="fold"><summary>数据与定位说明</summary><p class="muted">点击定位才会请求设备位置；选点、搜索和路线查询会传给高德。评分、照片、价格可能缺失；AI 评价检索尚未接入。收藏和到店记录留在当前浏览器。</p></details>`);}
 
 async function openLocation(target='near'){
+  if(!state.live&&typeof target==='number')return openPeople();
   if(!state.live){
     showModal(modalTop('📍 从这里出发')+`<div class="notice">演示地点，可先体验选点。真实地图需要配置高德。</div><div class="chips sheet-note">${places.map((p,i)=>`<button class="chip" data-demo-place="${i}">${p.name}</button>`).join('')}</div>${mapHTML()}<button class="btn full sheet-note" data-close>就从这里出发</button><button class="btn secondary full sheet-note" id="mapSetup">配置高德地图</button>`);bindMap();return;
   }
@@ -55,39 +56,42 @@ async function locateReal(){
 }
 function realOrigins(){return state.page==='fair'?state.people.map(p=>({...p.origin,mode:p.mode,limit:p.limit})):[{...state.origin,mode:state.config.mode,limit:state.config.limit}];}
 async function refreshCandidates(){
-  if(!state.live||state.page==='custom'){generate();render();return;}
+  if(state.page==='custom'){generate();render();return;}
+  if(!state.live)return buildDemoWheel();
   const origins=realOrigins();
   if(origins.some(p=>!p.location)){state.searchMessage='请先选好'+(state.page==='fair'?'每个人的':'你的')+'出发点';render();return state.page==='fair'?openPeople():openLocation();}
-  const token=++state.request;state.loading=true;state.candidates=[];state.searchMessage='';render();
+  const token=++state.request;state.loading=true;state.stage='loading';state.progress={value:8,title:'正在寻找附近餐厅…',detail:'先按口味和范围搜索'};state.candidates=[];state.searchMessage='';render();
   const config={...state.config,types:[...state.config.types]},fair=state.page==='fair';
   const start=Date.now(),limit=45000;
   try{
     const center=[0,1].map(i=>origins.reduce((sum,p)=>sum+p.location[i],0)/origins.length);
-    const searchConfig=fair?{...config,limit:Math.max(...origins.map(p=>p.limit)),mode:origins.some(p=>p.mode==='驾车')?'驾车':'步行'}:config;
+    const searchConfig=fair?{...config,limit:Math.max(...origins.map(p=>p.limit)),mode:origins.some(p=>p.mode==='驾车')?'驾车':origins.some(p=>p.mode==='公共交通')?'公共交通':'步行'}:config;
     let pool=await DouxMap.nearby(center,searchConfig);if(token!==state.request)return;
     pool=Doux.shuffle(pool).filter(s=>!state.excluded.has(s.id)&&(state.repeat||!state.drawn.has(s.id)));
-    const matches=[];let cursor=0,failures=0,completed=0;
+    const matches=[];let cursor=0,failures=0,completed=0,checked=0;
+    updateProgress(20,'正在核对路线…',`共 ${pool.length} 家待检查`);
     // Two workers bound quota usage; every selected restaurant must pass actual route checks.
     async function worker(){while(cursor<pool.length&&token===state.request&&Date.now()-start<limit){
       const store=pool[cursor++];
-      if(config.budget&&(store.price==null?!config.unknownPrice:store.price>config.budget))continue;
-      if(config.open&&!config.unknownHours)continue;
+      if(config.budget&&(store.price==null?!config.unknownPrice:store.price>config.budget)){checked++;continue;}
+      if(config.open&&!config.unknownHours){checked++;continue;}
       try{
         const times=[];
-        for(const origin of origins){if(token!==state.request||Date.now()-start>=limit)return;times.push(await DouxMap.route(origin.location,store.location,origin.mode));}
+        for(const origin of origins){if(token!==state.request||Date.now()-start>=limit)return;times.push(await DouxMap.route(origin.location,store.location,origin.mode,{city:origin.city,cityd:store.city}));}
         completed++;
         if(DouxMap.eligible(store,config,times,origins.map(p=>p.limit))){
-          const candidate={...store,times,max:Math.max(...times),gap:Math.max(...times)-Math.min(...times),sum:times.reduce((a,b)=>a+b,0),opening:null,routeMode:config.mode};
+          const candidate={...store,times,max:Math.max(...times),gap:Math.max(...times)-Math.min(...times),sum:times.reduce((a,b)=>a+b,0),opening:null,routeMode:config.mode==='公共交通'?'公交/地铁（含步行）':config.mode};
           matches.push(candidate);
         }
       }catch{failures++;}
+      checked++;if(token===state.request)updateProgress(20+Math.round(75*checked/Math.max(1,pool.length)),'正在核对路线…',`已检查 ${checked} / ${pool.length} 家，符合条件 ${matches.length} 家`);
     }}
     await Promise.all([worker(),worker()]);if(token!==state.request)return;
     state.candidates=(fair?matches.sort(Doux.fairSort):Doux.shuffle(matches)).slice(0,config.count);
     state.candidates.forEach(s=>state.catalog[s.id]=s);
     state.searchMessage=state.candidates.length?`找到 ${state.candidates.length} 家${failures?'，部分路线未获取':''}`:config.open&&!config.unknownHours?'营业时间未知，可在筛选中允许未知':failures&&!completed?'路线查询失败，请稍后重试':'本次检索暂无合适餐厅，试试调整条件';
   }catch(error){if(token===state.request)state.searchMessage=error.message;}
-  finally{if(token===state.request){state.loading=false;render();}}
+  finally{if(token===state.request){state.loading=false;state.stage=state.candidates.length?'wheel':'map';if(state.candidates.length)updateProgress(100,'候选已就位','转盘已准备好');render();window.scrollTo({top:0});}}
 }
 async function prepareDetails(store,delay){
   if(store.source!=='amap'){await new Promise(resolve=>setTimeout(resolve,delay));return;}
@@ -135,7 +139,7 @@ function handleCompactAction(button){
     case 'searchCustom':if(state.live)openLocation('custom');else setupSheet();break;
     case 'mapSetup':case 'mapSetupLink':setupSheet();break;
     case 'fetchCandidates':refreshCandidates();break;
-    case 'applyFilters':$('#modal').close();refreshCandidates();break;
+    case 'applyFilters':$('#modal').close();generate();render();toast('已保存，点击生成转盘继续');break;
     case 'generate':$('#modal').close();refreshCandidates();break;
     case 'customValidate':validateCustom();break;
     case 'mapSearchGo':searchMap();break;
@@ -147,10 +151,10 @@ function handleCompactAction(button){
       break;
     }
     case 'toggleMapMode':
-      state.live=!state.live;state.origin=state.live?{name:'选择真实出发点',location:null}:{...places[0]};
+      discovery.previews=[];discovery.cache=null;state.live=!state.live;state.origin=state.live?{name:'选择真实出发点',location:null}:{...places[0]};
       state.drawn.clear();state.excluded.clear();$('#modal').close();generate();render();updateSource();break;
     case 'openRules':showModal(modalTop('✨ 把纠结交给好运')+'<p class="detail-copy">每个候选被抽中的概率相同。点击开始就确定结果，转动期间优先获取中奖店资料，展示后再补充其他候选。<br><br>开启“本轮不重复”后，已抽中的店不会再次出现。新一轮会清除已抽与本轮排除记录。</p>');break;
-    case 'help':showModal(modalTop('你好，这里是都行 ✿')+'<p class="detail-copy">选出发点 → 调整口味 → 开始转盘。<br>详细设置都藏在卡片按钮里，点击就能展开。<br><br>“一起吃”比较多人的路程；“自选”放入纠结的店。收藏与到店记录保存在当前浏览器，清除站点数据会删除它们。</p>');break;
+    case 'help':showModal(modalTop('你好，这里是都行 ✿')+'<p class="detail-copy">地图选点 → 生成转盘 → 开始抽取。<br>详细设置都藏在卡片按钮里，点击就能展开。<br><br>地图上的“定位方式”可以切换单人、多人；“自选”放入纠结的店。收藏与到店记录保存在当前浏览器，清除站点数据会删除它们。</p>');break;
     default:return false;
   }
   return true;
@@ -162,6 +166,6 @@ generate();render();
 (async()=>{try{
   const result=await fetch('/api/map-config',{signal:AbortSignal.timeout(4000)});if(!result.ok)return;
   const config=await result.json();state.mapConfigured=config.configured;
-  if(config.configured){state.live=true;state.origin={name:'选择真实出发点',location:null};generate();render();updateSource();}
+  if(config.configured){discovery.previews=[];state.live=true;state.origin={name:'选择真实出发点',location:null};generate();render();updateSource();}
 }catch{/* Direct file preview stays in explicitly labelled demo mode. */}
 finally{state.checkingMap=false;render();}})();

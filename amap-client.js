@@ -12,12 +12,16 @@
     const photos = (Array.isArray(poi.photos) ? poi.photos : []).map(p => text(p.url)).filter(u => /^https:\/\//i.test(u));
     return {id:'amap-'+poi.id, poiId:poi.id, source:'amap', name:text(poi.name), location:coordinates(poi.location),
       type:text(poi.type).split(';').filter(Boolean).pop() || '餐饮', category:text(poi.type), typecode:text(poi.typecode),
-      address:[text(poi.cityname),text(poi.adname),text(poi.address)].join(''), price:number(poi.biz_ext?.cost),
+      city:text(poi.cityname)||text(poi.citycode),address:[text(poi.cityname),text(poi.adname),text(poi.address)].join(''), price:number(poi.biz_ext?.cost),
       rating:number(poi.biz_ext?.rating), phone:text(poi.tel), photos, hours:null, emoji:'🍽️', color:'#e7f5ef'};
   }
   function routeMinutes(result) {
     const time = result?.routes?.[0]?.time;
     return typeof time === 'number' && Number.isFinite(time) && time >= 0 ? Math.ceil(time / 60) : null;
+  }
+  function transitMinutes(result){
+    const plans=(result?.plans||[]).filter(p=>Number.isFinite(p.time)&&p.time>=0&&!p.segments?.some(s=>['TAXI','RAILWAY'].includes(s.transit_mode)));
+    return plans.length?Math.ceil(Math.min(...plans.map(p=>p.time))/60):null;
   }
   function eligible(store, config, times, limits) {
     return times.length === limits.length && times.every((time, i) => Number.isFinite(time) && time <= limits[i]) &&
@@ -31,7 +35,12 @@
         clearTimeout(timer);
         if (status === 'complete') resolve(result);
         else if (status === 'no_data') resolve(null);
-        else reject(new Error('高德服务未返回结果，请检查 Key、白名单和服务额度'));
+        else {
+          const diagnostic=JSON.stringify(result)||'';
+          const code=(diagnostic.match(/\b(?:INVALID|USERKEY|INSUFFICIENT|SERVICE|DAILY|ACCESS|INVALID_USER_SCODE)[A-Z_]*\b/)||[])[0] || (typeof result==='string'?result:result?.info);
+          const safe=typeof code==='string'&&/^[A-Z][A-Z_0-9]{2,60}$/.test(code)?'（'+code+'）':'';
+          reject(new Error('高德服务未返回结果'+safe+'，请检查 Key、白名单和服务额度'));
+        }
       }); } catch (error) {clearTimeout(timer); reject(error);}
     });
   }
@@ -53,7 +62,7 @@
       });
       await new Promise((resolve,reject) => {
         const timer=setTimeout(()=>reject(new Error('地图插件加载超时')),12000);
-        root.AMap.plugin(['AMap.PlaceSearch','AMap.Geocoder','AMap.Geolocation','AMap.Walking','AMap.Driving'],()=>{clearTimeout(timer);resolve();});
+        root.AMap.plugin(['AMap.PlaceSearch','AMap.Geocoder','AMap.Geolocation','AMap.Walking','AMap.Driving','AMap.Transfer'],()=>{clearTimeout(timer);resolve();});
       });
       return root.AMap;
     })().catch(error => {sdkPromise=null; throw error;});
@@ -65,7 +74,8 @@
     '西餐':{type:'050201|050204|050205|050207|050208|050210|050211|050212|050213|050214|050215|050216'},
     '韩餐':{type:'050203'},'日料':{type:'050202'},'火锅':{type:'050117'},
     '东南亚':{type:'050000',keyword:'东南亚|泰国|越南|新加坡|马来西亚|印尼'},
-    '烧烤':{type:'050000',keyword:'烧烤|烤串'}
+    '烧烤':{type:'050000',keyword:'烧烤|烤串'},
+    '奶茶':{type:'050000',keyword:'奶茶|茶饮|喜茶|奈雪|蜜雪冰城|古茗|茶百道|霸王茶姬|沪上阿姨|一点点|益禾堂|书亦烧仙草|茶月山'}
   };
   function matchesCuisine(store, selected) {
     if (!selected.length) return true;
@@ -82,18 +92,45 @@
   }
   async function nearby(origin, config) {
     const A = await load();
-    const radius = Math.min(50000, Math.max(1000,config.limit*(config.mode==='驾车'?700:90)));
+    const radius = Math.min(50000, Math.max(1000,config.limit*(config.mode==='驾车'?700:config.mode==='公共交通'?400:90)));
     const queries=config.types.length?config.types.map(t=>cuisineQueries[t]):[{type:'050000'}];
     const groups=await Promise.all(queries.map(async query=>{
       const result=await call(done=>new A.PlaceSearch({type:query.type,pageSize:20,extensions:'all'}).searchNearBy(query.keyword||'',origin,radius,done));
-      return (result?.poiList?.pois||[]).map(normalize).filter(p=>p.location);
+      return (result?.poiList?.pois||[]).map(normalize).filter(p=>p.location&&matchesCuisine(p,config.types));
     }));
     const unique=new Map();
     for(let row=0;row<20&&unique.size<20;row++)for(const group of groups){if(group[row]&&unique.size<20)unique.set(group[row].id,group[row]);}
     return [...unique.values()];
   }
-  async function route(from,to,mode) {
+  const cities=new Map();
+  async function cityAt(point){
+    const key=point.join(',');if(cities.has(key))return cities.get(key);
+    const A=await load();
+    const result=await call(done=>new A.Geocoder().getAddress(point,done));
+    const address=result?.regeocode?.addressComponent;
+    const city=text(address?.city)||text(address?.province);
+    if(!city)throw new Error('无法确定公交查询城市，请重新搜索出发地点');
+    cities.set(key,city);return city;
+  }
+  const routeSlots=new Map();
+  async function waitRouteSlot(mode){
+    // Reserve request slots across workers, including a previous cancelled search.
+    const now=Date.now(),slot=Math.max(now,routeSlots.get(mode)||0);
+    routeSlots.set(mode,slot+1150);
+    if(slot>now)await new Promise(resolve=>setTimeout(resolve,slot-now));
+  }
+  async function route(from,to,mode,context={}) {
     const A = await load();
+    if(mode==='公共交通'){
+      const city=context.city||await cityAt(from),cityd=context.cityd||await cityAt(to);
+      await waitRouteSlot(mode);
+      const service=new A.Transfer({city,cityd,policy:A.TransferPolicy.LEAST_TIME,extensions:'all'});
+      const minutes=transitMinutes(await call(done=>service.search(from,to,done)));
+      // Nearby destinations often have no bus/subway plan. Check a real walking
+      // route in that case; never turn missing route data into a zero-minute trip.
+      return minutes==null?route(from,to,'步行'):minutes;
+    }
+    await waitRouteSlot(mode);
     const service = mode === '驾车' ? new A.Driving() : new A.Walking();
     const result = await call(done => service.search(from,to,done));
     return routeMinutes(result);
@@ -111,6 +148,6 @@
     if(!point) throw new Error('未获取到定位，请在地图上手动选点');
     return {location:point,name:result.formattedAddress || '我的位置'};
   }
-  const api={coordinates,normalize,routeMinutes,eligible,matchesCuisine,call,load,search,nearby,route,details,locate};
+  const api={coordinates,normalize,routeMinutes,transitMinutes,cityAt,eligible,matchesCuisine,call,load,search,nearby,route,details,locate};
   if(typeof module!=='undefined') module.exports=api; else root.DouxMap=api;
 })(typeof window!=='undefined'?window:globalThis);

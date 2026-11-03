@@ -29,12 +29,41 @@ test('SDK 回调处理失败、无数据与超时',async()=>{
   await assert.rejects(adapter.call(done=>done('error')));
   await assert.rejects(adapter.call(()=>{},5),/超时/);
 });
+test('公交时间包含全程且排除出租车及铁路方案',()=>{
+  assert.equal(adapter.transitMinutes({plans:[{time:601,segments:[{transit_mode:'WALK'},{transit_mode:'SUBWAY'}]},{time:100,segments:[{transit_mode:'TAXI'}]},{time:120,segments:[{transit_mode:'RAILWAY'}]}]}),11);
+  assert.equal(adapter.transitMinutes({plans:[]}),null);
+  assert.equal(adapter.transitMinutes(null),null);
+});
+test('公交适配传入城市并在无换乘方案时核对真实步行',async()=>{
+  let options,walking=0;
+  const AMap={plugin(_names,done){done();},TransferPolicy:{LEAST_TIME:0},
+    Transfer:class{constructor(value){options=value;}search(_from,_to,done){done('complete',{info:'NO_DATA',plans:[]});}},
+    Walking:class{search(_from,_to,done){walking++;done('complete',{routes:[{time:361}]});}}};
+  const context={window:{AMap},location:{origin:'http://localhost'},document:{createElement:()=>({remove(){}}),head:{append(script){script.onload();}}},fetch:async()=>({ok:true,json:async()=>({configured:true,key:'test'})}),AbortSignal,setTimeout,clearTimeout};
+  vm.createContext(context);vm.runInContext(fs.readFileSync(__dirname+'/amap-client.js','utf8'),context);
+  assert.equal(await context.window.DouxMap.route([113,23],[113.01,23.01],'公共交通',{city:'广州',cityd:'广州'}),7);
+  assert.equal(options.city,'广州');assert.equal(options.cityd,'广州');assert.equal(walking,1);
+});
+test('JSONP 代理使用可执行 MIME，同时拒绝无效回调',async()=>{
+  const server=createServer({config:{key:'test-key',security:'test-code'},fetcher:async()=>new Response('AMap.test({"status":"1"})',{headers:{'Content-Type':'application/json'}})});
+  const base=await listen(server);
+  try{
+    const response=await fetch(base+'/_AMapService/v3/place/around?callback=AMap.test');
+    assert.match(response.headers.get('content-type'),/^application\/javascript/);
+    assert.equal(response.headers.get('x-content-type-options'),'nosniff');
+    assert.equal(await response.text(),'AMap.test({"status":"1"})');
+    assert.equal((await fetch(base+'/_AMapService/v3/place/around?callback=alert(1)')).status,400);
+  }finally{await new Promise(resolve=>server.close(resolve));}
+});
 test('菜系映射区分西餐、东南亚与烧烤，不能把地方菜当烧烤',()=>{
   assert.equal(adapter.matchesCuisine({typecode:'050204',category:'法式菜品餐厅'},['西餐']),true);
   assert.equal(adapter.matchesCuisine({typecode:'050204',category:'法式菜品餐厅'},['东南亚']),false);
   assert.equal(adapter.matchesCuisine({typecode:'050206',category:'泰国/越南菜品餐厅'},['东南亚']),true);
   assert.equal(adapter.matchesCuisine({typecode:'050118',category:'特色/地方风味餐厅',name:'家常菜'},['烧烤']),false);
   assert.equal(adapter.matchesCuisine({typecode:'050118',name:'小院烧烤'},['烧烤']),true);
+  assert.equal(adapter.matchesCuisine({name:'巷口奶茶',category:'餐饮服务'},['奶茶']),true);
+  assert.equal(adapter.matchesCuisine({name:'喜茶(广场店)',category:'餐饮服务'},['奶茶']),true);
+  assert.equal(adapter.matchesCuisine({name:'家常菜',category:'中餐厅'},['奶茶']),false);
 });
 async function listen(server){await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));return 'http://127.0.0.1:'+server.address().port;}
 test('本地服务不暴露配置文件，未配置时不代理',async()=>{
@@ -61,10 +90,10 @@ test('安全代理固定高德上游，覆盖伪造凭证并隐藏安全密钥',
 });
 
 function harness(map){
-  const element={addEventListener(){},innerHTML:'',textContent:'',open:false};
+  const element={addEventListener(){},innerHTML:'',textContent:'',open:false,style:{},parentElement:{setAttribute(){}}};
   const context={state:{page:'near',origin:{name:'测试起点',location:[113,23]},config:{mode:'步行',limit:15,budget:0,types:[],count:6},people:[],excluded:new Set(),drawn:new Set(),repeat:false},
-    DouxMap:{...adapter,...map},Doux:core,document:{addEventListener(){},querySelector(){return element;}},$:()=>element,generate(){},render(){},fetch:async()=>({ok:false}),AbortSignal,console,setTimeout,clearTimeout};
-  vm.createContext(context);vm.runInContext(fs.readFileSync(__dirname+'/map-ui.js','utf8'),context);context.state.live=true;
+    DouxMap:{...adapter,...map},Doux:core,document:{addEventListener(){},querySelector(){return element;}},$:()=>element,generate(){},render(){},fetch:async()=>({ok:false}),AbortSignal,console,setTimeout,clearTimeout,window:{scrollTo(){}}};
+  vm.createContext(context);vm.runInContext(fs.readFileSync(__dirname+'/discovery.js','utf8'),context);vm.runInContext(fs.readFileSync(__dirname+'/map-ui.js','utf8'),context);context.state.live=true;
   return context;
 }
 test('较旧的候选请求不能覆盖新条件的结果',async()=>{
@@ -73,6 +102,15 @@ test('较旧的候选请求不能覆盖新条件的结果',async()=>{
   const h=harness({nearby:()=>++count===1?new Promise(resolve=>resolveOld=resolve):Promise.resolve([restaurant('new')]),route:async()=>10});
   const old=h.refreshCandidates();await h.refreshCandidates();resolveOld([restaurant('old')]);await old;
   assert.equal(h.state.candidates[0].id,'new');assert.equal(h.state.loading,false);
+  assert.equal(h.state.stage,'wheel');
+});
+test('取消生成后旧请求不会跳回转盘，无结果留在地图',async()=>{
+  let finish;
+  const h=harness({nearby:()=>new Promise(resolve=>finish=resolve),route:async()=>10});
+  const pending=h.refreshCandidates();assert.equal(h.state.stage,'loading');h.returnToMap();
+  finish([{id:'old',location:[113,23],price:30}]);await pending;
+  assert.equal(h.state.stage,'map');assert.equal(h.state.loading,false);assert.equal(h.state.candidates.length,0);
+  const empty=harness({nearby:async()=>[]});await empty.refreshCandidates();assert.equal(empty.state.stage,'map');
 });
 test('公平集合按真实多起点耗时排序且排除超时店',async()=>{
   const h=harness({nearby:async()=>[1,2,3].map(n=>({id:'store'+n,location:[n,23],price:30})),route:async(from,to)=>({1:[10,30],2:[20,20],3:[10,40]}[to[0]][from[0]-1])});
