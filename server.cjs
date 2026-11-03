@@ -1,32 +1,49 @@
 const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
+const {createResearch} = require('./ai-service.cjs');
 
 function loadConfig(root = __dirname) {
   let source = '';
   try { source = fs.readFileSync(path.join(root, '.env'), 'utf8'); } catch {}
   const values = {};
   for (const line of source.split(/\r?\n/)) {
-    const match = line.match(/^\s*(AMAP_JS_KEY|AMAP_SECURITY_CODE)\s*=\s*(.*?)\s*$/);
+    const match = line.match(/^\s*(AMAP_JS_KEY|AMAP_SECURITY_CODE|DEEPSEEK_API_KEY|DEEPSEEK_MODEL)\s*=\s*(.*?)\s*$/);
     if (match) values[match[1]] = match[2].replace(/^(['"])(.*)\1$/, '$2');
   }
-  return {key: process.env.AMAP_JS_KEY || values.AMAP_JS_KEY || '', security: process.env.AMAP_SECURITY_CODE || values.AMAP_SECURITY_CODE || ''};
+  return {key: process.env.AMAP_JS_KEY || values.AMAP_JS_KEY || '', security: process.env.AMAP_SECURITY_CODE || values.AMAP_SECURITY_CODE || '', deepseekKey:process.env.DEEPSEEK_API_KEY || values.DEEPSEEK_API_KEY || '', deepseekModel:process.env.DEEPSEEK_MODEL || values.DEEPSEEK_MODEL || 'deepseek-flash'};
 }
 
 function createServer({config = loadConfig(), fetcher = fetch} = {}) {
-  const files = new Set(['index.html', 'style.css', 'app.js', 'core.js', 'amap-client.js', 'map-ui.js', 'discovery.js']);
+  const research=createResearch({config,fetcher});
+  const files = new Set(['index.html', 'style.css', 'app.js', 'core.js', 'amap-client.js', 'map-ui.js', 'discovery.js', 'ai-client.js']);
   const types = {'.html':'text/html; charset=utf-8', '.js':'application/javascript; charset=utf-8', '.css':'text/css; charset=utf-8'};
   return http.createServer(async (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
     const json = (status, data) => {res.writeHead(status, {'Content-Type':'application/json; charset=utf-8'}); res.end(JSON.stringify(data));};
-    if (req.method !== 'GET') return json(405, {error:'仅支持 GET 请求'});
     if (!/^(127\.0\.0\.1|localhost)(:\d+)?$/.test(req.headers.host || '')) return json(403, {error:'仅允许本机访问'});
     if (req.headers['sec-fetch-site'] === 'cross-site') return json(403, {error:'不允许跨站请求'});
     if (req.headers.origin && req.headers.origin !== `http://${req.headers.host}`) return json(403, {error:'不允许跨站请求'});
     let url;
     try { url = new URL(req.url, 'http://localhost'); } catch { return json(400, {error:'请求地址无效'}); }
+    if (url.pathname === '/api/store-research' && req.method === 'POST') {
+      if (!/^application\/json(?:;|$)/i.test(req.headers['content-type'] || '')) return json(415,{error:'请使用 JSON 请求'});
+      try {
+        const chunks=[];let size=0;
+        for await (const chunk of req) {
+          size+=chunk.length;
+          if(size>8192)return json(413,{error:'请求内容过大'});
+          chunks.push(chunk);
+        }
+        let input;
+        try { input=JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch { return json(400,{error:'JSON 格式无效'}); }
+        return json(200,await research(input));
+      } catch(error) { return json(error.status || 502,{error:error.status?error.message:'资料检索暂时失败，请重试'}); }
+    }
+    if (req.method !== 'GET') return json(405, {error:'不支持的请求方法'});
+    if (url.pathname === '/api/ai-config') return json(200,{configured:Boolean(config.deepseekKey),model:config.deepseekModel || 'deepseek-flash'});
     const configured = Boolean(config.key && config.security);
     if (url.pathname === '/api/map-config') return json(200, {configured, key:configured ? config.key : ''});
     if (url.pathname.startsWith('/_AMapService/')) {

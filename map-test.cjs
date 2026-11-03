@@ -166,3 +166,14 @@ test('详情请求失败保留真实基础资料而非填入演示介绍',async(
   const h=harness({details:async()=>{throw new Error('offline')}}),store={id:'real',source:'amap',name:'真实店'};
   await h.prepareDetails(store,0);assert.equal(store.name,'真实店');assert.equal(store.detailError,true);assert.equal(store.intro,undefined);
 });
+
+test('共享及缓存资料不会覆盖新路线或自定义显示名称',async()=>{
+  let finish,calls=0;
+  const h=harness({details:s=>{calls++;return new Promise(resolve=>finish=()=>resolve({...s,phone:'020-123',max:99}));}});
+  h.DouxAI={research:async()=>({status:'ready',retrievedAt:new Date().toISOString()})};
+  const original={id:'real',source:'amap',poiId:'A',name:'真实店',address:'地址',max:12};
+  const newer={...original,name:'我的别名',poiName:'真实店',max:5};
+  const a=h.prepareDetails(original,0),b=h.prepareDetails(newer,0);finish();await Promise.all([a,b]);
+  assert.equal(calls,1);assert.equal(newer.max,5);assert.equal(newer.name,'我的别名');assert.equal(newer.phone,'020-123');
+  await h.prepareDetails(newer,0);assert.equal(calls,1);assert.equal(newer.max,5);
+});
