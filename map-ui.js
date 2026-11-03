@@ -113,15 +113,13 @@ async function validateCustom(){
     if(token!==state.request)return;
     if(store.manual)continue;
     if(store.source==='amap'){
-      const matched=play?DouxMap.matchesPlay(store,config.types.length?config.types:DouxMap.playTypes):DouxMap.matchesCuisine(store,config.types);
-      if(!matched)continue;
       try{const time=await DouxMap.route(origin.location,store.location,config.mode);
         if(DouxMap.eligible(store,config,[time],[config.limit]))accepted.push({...store,times:[time],max:time,opening:null,routeMode:config.mode});
       }catch{failed++;}
     }else if(!state.live){const checked=Doux.evaluate(store,config,[{...origin,mode:config.mode,limit:config.limit}]);if(checked.eligible)accepted.push(checked);}
   }
   if(token!==state.request)return;
-  state.candidates=accepted;state.loading=false;render();toast(`校验后保留 ${accepted.length} ${play?'家场馆':'家餐厅'}${failed?'，部分路线未获取':''}；未关联选项不参与校验`);
+  state.candidates=accepted;state.loading=false;render();toast(`校验后保留 ${accepted.length} ${play?'家场馆':'家餐厅'}${failed?'，部分路线未获取':''}；仅按路程与预算，未关联选项不参与校验`);
 }
 function handleCompactAction(button){
   const d=button.dataset;

@@ -150,7 +150,7 @@ test('公平集合按真实多起点耗时排序且排除超时店',async()=>{
   h.state.page='fair';h.state.people=[{origin:{location:[1,23]},mode:'步行',limit:30},{origin:{location:[2,23]},mode:'驾车',limit:30}];
   await h.refreshCandidates();assert.deepEqual(Array.from(h.state.candidates,s=>s.id),['store2','store1']);
 });
-test('自选校验在游玩模式只保留娱乐场馆',async()=>{
+test('自选校验只按路程与预算，不再按类别二次筛选',async()=>{
   const h=harness({route:async()=>8});
   h.state.live=true;h.state.activity='play';
   h.state.config={mode:'步行',limit:20,budget:0,types:[],count:6,activity:'play'};
@@ -160,7 +160,7 @@ test('自选校验在游玩模式只保留娱乐场馆',async()=>{
     {id:'manual',manual:true,name:'自组局'}
   ];
   await h.validateCustom();
-  assert.deepEqual(Array.from(h.state.candidates,s=>s.id),['cinema']);
+  assert.deepEqual(Array.from(h.state.candidates,s=>s.id),['cinema','restaurant'],'手动挑选的候选不再被类别筛掉');
 });
 test('详情请求失败保留真实基础资料而非填入演示介绍',async()=>{
   const h=harness({details:async()=>{throw new Error('offline')}}),store={id:'real',source:'amap',name:'真实店'};
