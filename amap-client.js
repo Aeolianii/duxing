@@ -85,6 +85,43 @@
       return query.type.split('|').some(code=>String(store.typecode).startsWith(code.endsWith('00')?code.slice(0,4):code));
     });
   }
+  // Entertainment venues: AMap has dedicated codes for cinemas, KTV and bars;
+  // escape rooms and script-killing rooms share the generic leisure type, so
+  // those rely on keyword search plus a name match.
+  const playQueries = {
+    '看电影':{type:'080601',match:['电影院']},
+    '密室逃脱':{type:'080000',keyword:'密室逃脱|密室|逃脱',nameRe:/密室|逃脱/},
+    '剧本杀':{type:'080000',keyword:'剧本杀|剧本|推理',nameRe:/剧本|推理|侦探/},
+    '唱K':{type:'080302',match:['KTV']},
+    '桌游':{type:'080000',keyword:'桌游|狼人杀|游戏社',nameRe:/桌游|狼人杀/},
+    '酒吧':{type:'080304',match:['酒吧']},
+    '看演出':{type:'080603|080602',match:['剧场','音乐厅']}
+  };
+  function matchesPlay(store, selected) {
+    if (!selected.length) return true;
+    const hay = text(store.name) + ' ' + text(store.category) + ' ' + text(store.type);
+    return selected.some(label => {
+      const query = playQueries[label];
+      if (!query) return false;
+      if (query.nameRe) return query.nameRe.test(hay);
+      return (query.match||[]).some(word => hay.includes(word));
+    });
+  }
+  function playEmoji(store) {
+    const hay = text(store.name) + ' ' + text(store.category);
+    if (/密室|逃脱/.test(hay)) return '🗝️';
+    if (/剧本|推理|侦探/.test(hay)) return '🕵️';
+    if (/桌游|狼人杀/.test(hay)) return '🎲';
+    if (/电影|影城|影院|IMAX|CGV/i.test(hay)) return '🎬';
+    if (/KTV|卡拉|量贩|歌/i.test(hay)) return '🎤';
+    if (/酒吧|酒馆|精酿|livehouse/i.test(hay)) return '🍻';
+    if (/剧场|剧院|音乐厅|演出|相声|喜剧/.test(hay)) return '🎭';
+    return '🎡';
+  }
+  const playColors = ['#ffe0ec','#e2f0ff','#e8e2ff','#dff3e6','#fff0cf','#f6e3ff'];
+  function decoratePlay(store, index) {
+    return {...store, activity:'play', emoji:playEmoji(store), color:playColors[index % playColors.length]};
+  }
   async function search(query) {
     const A = await load();
     const result = await call(done => new A.PlaceSearch({pageSize:8,extensions:'all'}).search(query,done));
@@ -93,6 +130,25 @@
   async function nearby(origin, config) {
     const A = await load();
     const radius = Math.min(50000, Math.max(1000,config.limit*(config.mode==='驾车'?700:config.mode==='公共交通'?400:90)));
+    if (config.activity === 'play') {
+      const pairs = config.types.length ? config.types.map(label => [label, playQueries[label]]).filter(pair => pair[1]) : Object.entries(playQueries);
+      // One query at a time: several parallel PlaceSearch calls trip AMap's
+      // per-key QPS limit, so the extra latency is cheaper than a failed wheel.
+      // Map previews only need a few pins, so they ask fewer categories.
+      const list = config.preview ? pairs.slice(0, 3) : pairs;
+      const groups = [];
+      for (const [label, query] of list) {
+        const result = await call(done => new A.PlaceSearch({type:query.type,pageSize:20,extensions:'all'}).searchNearBy(query.keyword||'',origin,radius,done));
+        groups.push((result?.poiList?.pois||[]).map(normalize).filter(p => p.location && matchesPlay(p, [label])));
+        if (list.length > 1) await new Promise(resolve => setTimeout(resolve, 420));
+      }
+      const unique = new Map();
+      for (let row=0; row<20 && unique.size<20; row++) for (const group of groups) {
+        const store = group[row];
+        if (store && unique.size < 20) unique.set(store.id, decoratePlay(store, unique.size));
+      }
+      return [...unique.values()];
+    }
     const queries=config.types.length?config.types.map(t=>cuisineQueries[t]):[{type:'050000'}];
     const groups=await Promise.all(queries.map(async query=>{
       const result=await call(done=>new A.PlaceSearch({type:query.type,pageSize:20,extensions:'all'}).searchNearBy(query.keyword||'',origin,radius,done));
@@ -139,7 +195,12 @@
     const A = await load();
     const result = await call(done => new A.PlaceSearch({extensions:'all'}).getDetails(store.poiId,done),8000);
     const poi = result?.poiList?.pois?.find(p=>p.id===store.poiId);
-    return poi ? {...store,...normalize(poi)} : store;
+    if (!poi) return store;
+    const next = {...store, ...normalize(poi)};
+    next.emoji = store.emoji || next.emoji;
+    next.color = store.color || next.color;
+    next.activity = store.activity || next.activity;
+    return next;
   }
   async function locate() {
     const A=await load();
@@ -148,6 +209,6 @@
     if(!point) throw new Error('未获取到定位，请在地图上手动选点');
     return {location:point,name:result.formattedAddress || '我的位置'};
   }
-  const api={coordinates,normalize,routeMinutes,transitMinutes,cityAt,eligible,matchesCuisine,call,load,search,nearby,route,details,locate};
+  const api={coordinates,normalize,routeMinutes,transitMinutes,cityAt,eligible,matchesCuisine,matchesPlay,playQueries,call,load,search,nearby,route,details,locate};
   if(typeof module!=='undefined') module.exports=api; else root.DouxMap=api;
 })(typeof window!=='undefined'?window:globalThis);

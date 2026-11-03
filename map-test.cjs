@@ -65,6 +65,39 @@ test('菜系映射区分西餐、东南亚与烧烤，不能把地方菜当烧�
   assert.equal(adapter.matchesCuisine({name:'喜茶(广场店)',category:'餐饮服务'},['奶茶']),true);
   assert.equal(adapter.matchesCuisine({name:'家常菜',category:'中餐厅'},['奶茶']),false);
 });
+test('游玩分类按类型或名称匹配，不能把写字楼当电影院',()=>{
+  assert.equal(adapter.matchesPlay({name:'金逸空中电影城',category:'体育休闲服务;影剧院;电影院'},['看电影']),true);
+  assert.equal(adapter.matchesPlay({name:'天德荟商务公馆',category:'商务住宅;楼宇;商务写字楼'},['看电影']),false);
+  assert.equal(adapter.matchesPlay({name:'Time Travel密室体验馆',category:'体育休闲服务;体育休闲服务场所;体育休闲服务场所'},['密室逃脱']),true);
+  assert.equal(adapter.matchesPlay({name:'剧汇推理社剧本杀',category:'体育休闲服务;娱乐场所;娱乐场所'},['剧本杀']),true);
+  assert.equal(adapter.matchesPlay({name:'星聚会KTV黑金店',category:'体育休闲服务;娱乐场所;KTV'},['唱K']),true);
+  assert.equal(adapter.matchesPlay({name:'声音共和Livehouse',category:'体育休闲服务;娱乐场所;酒吧'},['酒吧']),true);
+  assert.equal(adapter.matchesPlay({name:'广州塔剧场',category:'体育休闲服务;影剧院;剧场'},['看演出']),true);
+  assert.equal(adapter.matchesPlay({name:'随便一家小店',category:'餐饮服务'},[]),true);
+});
+test('游玩附近搜索逐个分类请求，只保留匹配场馆并带场馆表情',async()=>{
+  const calls=[];
+  const poi=(id,name,type,typecode)=>({id,name,type,typecode,location:'113.3,23.1',biz_ext:{}});
+  const AMap={plugin(_names,done){done();},
+    PlaceSearch:class{constructor(options){this.options=options;}
+      searchNearBy(keyword,_center,_radius,done){
+        calls.push({type:this.options.type,keyword});
+        const pois=this.options.type==='080601'?[poi('A1','金逸空中电影城','体育休闲服务;影剧院;电影院','080601'),poi('A2','某写字楼','商务住宅;写字楼','120201')]:
+          [poi('B1','迷雾密室逃脱','体育休闲服务;娱乐场所','080000'),poi('B2','某咖啡馆','餐饮服务;咖啡厅','050500')];
+        done('complete',{poiList:{pois}});
+      }}};
+  const context={window:{AMap},location:{origin:'http://localhost'},document:{createElement:()=>({remove(){}}),head:{append(script){script.onload();}}},fetch:async()=>({ok:true,json:async()=>({configured:true,key:'test'})}),AbortSignal,setTimeout,clearTimeout};
+  vm.createContext(context);vm.runInContext(fs.readFileSync(__dirname+'/amap-client.js','utf8'),context);
+  const movies=await context.window.DouxMap.nearby([113.3,23.1],{limit:15,mode:'步行',types:['看电影'],activity:'play'});
+  assert.deepEqual(calls,[{type:'080601',keyword:''}]);
+  assert.deepEqual(Array.from(movies,s=>s.name),['金逸空中电影城']);
+  assert.equal(movies[0].activity,'play');assert.equal(movies[0].emoji,'🎬');
+  calls.length=0;
+  const escapes=await context.window.DouxMap.nearby([113.3,23.1],{limit:15,mode:'步行',types:['密室逃脱'],activity:'play'});
+  assert.deepEqual(calls,[{type:'080000',keyword:'密室逃脱|密室|逃脱'}]);
+  assert.deepEqual(Array.from(escapes,s=>s.name),['迷雾密室逃脱']);
+  assert.equal(escapes[0].emoji,'🗝️');
+});
 async function listen(server){await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));return 'http://127.0.0.1:'+server.address().port;}
 test('本地服务不暴露配置文件，未配置时不代理',async()=>{
   let calls=0;const server=createServer({config:{key:'',security:''},fetcher:()=>calls++});const base=await listen(server);

@@ -4,7 +4,7 @@ const mapUI={map:null,marker:null,token:0,searchToken:0,draft:null,target:null,r
 state.live=false;state.mapConfigured=false;state.catalog={};state.request=0;state.checkingMap=true;
 
 function disposeMap(){mapUI.token++;mapUI.searchToken++;mapUI.map?.destroy();mapUI.map=null;mapUI.marker=null;}
-function openFilters(){showModal(modalTop('🍋 这一顿，想怎么吃？')+settings());}
+function openFilters(){showModal(modalTop((state.activity==='play')?'🎡 这一次，想怎么玩？':'🍋 这一顿，想怎么吃？')+settings());}
 function openCandidates(){showModal(modalTop('🍽️ 本轮的美味候选')+`<div class="candidate-list">${available().map(s=>`<div class="candidate-row"><button data-detail="${s.id}" class="candidate-main"><span class="candidate-emoji">${s.emoji||'🍽️'}</span><span><strong>${esc(s.name)}</strong><small>${s.price==null?'人均未知':'约 ¥'+s.price+'/人'}${Number.isFinite(s.max)?' · '+s.max+' 分钟':''}</small></span></button><button data-exclude="${s.id}" class="close" aria-label="移除${esc(s.name)}">×</button></div>`).join('')||'<div class="empty"><b>还没有可抽的餐厅</b>试试调整条件，或开启新一轮。</div>'}</div><p class="muted sheet-note">每家概率相同，点店名查看详情。</p>`);}
 function openCustom(){showModal(modalTop('🍱 我的心愿餐厅')+customPanel()+(state.mapConfigured?'<button class="btn full" id="searchCustom">在高德查找餐厅</button>':''));}
 function openPeople(){
@@ -60,8 +60,8 @@ async function refreshCandidates(){
   if(!state.live)return buildDemoWheel();
   const origins=realOrigins();
   if(origins.some(p=>!p.location)){state.searchMessage='请先选好'+(state.page==='fair'?'每个人的':'你的')+'出发点';render();return state.page==='fair'?openPeople():openLocation();}
-  const token=++state.request;state.loading=true;state.stage='loading';state.progress={value:8,title:'正在寻找附近餐厅…',detail:'先按口味和范围搜索'};state.candidates=[];state.searchMessage='';render();
-  const config={...state.config,types:[...state.config.types]},fair=state.page==='fair';
+  const token=++state.request;state.loading=true;state.stage='loading';state.progress={value:8,title:(state.activity==='play')?'正在寻找附近场馆…':'正在寻找附近餐厅…',detail:(state.activity==='play')?'先按类型和范围搜索':'先按口味和范围搜索'};state.candidates=[];state.searchMessage='';render();
+  const config={...state.config,types:[...state.config.types],activity:state.activity},fair=state.page==='fair';
   const start=Date.now(),limit=45000;
   try{
     const center=[0,1].map(i=>origins.reduce((sum,p)=>sum+p.location[i],0)/origins.length);
@@ -89,7 +89,7 @@ async function refreshCandidates(){
     await Promise.all([worker(),worker()]);if(token!==state.request)return;
     state.candidates=(fair?matches.sort(Doux.fairSort):Doux.shuffle(matches)).slice(0,config.count);
     state.candidates.forEach(s=>state.catalog[s.id]=s);
-    state.searchMessage=state.candidates.length?`找到 ${state.candidates.length} 家${failures?'，部分路线未获取':''}`:config.open&&!config.unknownHours?'营业时间未知，可在筛选中允许未知':failures&&!completed?'路线查询失败，请稍后重试':'本次检索暂无合适餐厅，试试调整条件';
+    state.searchMessage=state.candidates.length?`找到 ${state.candidates.length} 家${failures?'，部分路线未获取':''}`:config.open&&!config.unknownHours?'营业时间未知，可在筛选中允许未知':failures&&!completed?'路线查询失败，请稍后重试':'本次检索暂无合适'+(state.activity==='play'?'场馆':'餐厅')+'，试试调整条件';
   }catch(error){if(token===state.request)state.searchMessage=error.message;}
   finally{if(token===state.request){state.loading=false;state.stage=state.candidates.length?'wheel':'map';if(state.candidates.length)updateProgress(100,'候选已就位','转盘已准备好');render();window.scrollTo({top:0});}}
 }
@@ -100,7 +100,7 @@ async function prepareDetails(store,delay){
 }
 function openRealRoute(store){
   const params=new URLSearchParams({position:store.location.join(','),name:store.name,src:'doux',coordinate:'gaode',callnative:'1'});
-  showModal(modalTop('📍 去吃这家')+`<div class="intro-box"><b>${esc(store.name)}</b><br>${esc(store.address)}</div><p class="detail-copy">在高德中确认出发位置、选择路线并导航。实时交通和实际营业情况可能变化。</p><a class="btn full" href="https://uri.amap.com/marker?${esc(params.toString())}" target="_blank" rel="noopener noreferrer">在高德地图中打开 ↗</a>`);
+  showModal(modalTop(store.activity==='play'?'📍 去这里':'📍 去吃这家')+`<div class="intro-box"><b>${esc(store.name)}</b><br>${esc(store.address)}</div><p class="detail-copy">在高德中确认出发位置、选择路线并导航。实时交通和实际场次 / 营业情况可能变化。</p><a class="btn full" href="https://uri.amap.com/marker?${esc(params.toString())}" target="_blank" rel="noopener noreferrer">在高德地图中打开 ↗</a>`);
 }
 async function validateCustom(){
   const real=state.custom.filter(s=>s.source==='amap');

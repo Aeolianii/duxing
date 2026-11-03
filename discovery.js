@@ -16,18 +16,18 @@ function originList(){return state.page==='fair'?state.people.map((p,i)=>({...p.
 function renderDiscovery(){
   if(state.stage==='loading')return renderGenerating();
   if(state.stage==='wheel'){
-    $('#view').innerHTML=`<div class="step-nav"><button id="backToMap">‹ 返回地图</button><span>② 转一转</span></div>`+heading('美味已就位！','候选准备好了，按下开始揭晓这一餐。')+wheelPanel()+`<div class="under-wheel"><button id="openCandidates" class="candidate-entry"><span>🍽️</span><strong>看看候选</strong><small>${available().length} 家</small><span>›</span></button><button id="refresh" class="refresh-entry">↻ 重新生成</button></div><p class="muted sheet-note">${state.live?'高德餐厅与路线数据':'演示候选'} · 本轮候选等概率</p>`;
+    $('#view').innerHTML=`<div class="step-nav"><button id="backToMap">‹ 返回地图</button><span>② 转一转</span></div>`+((state.activity==='play')?heading('好玩已就位！','候选准备好了，按下开始揭晓这一场。'):heading('美味已就位！','候选准备好了，按下开始揭晓这一餐。'))+wheelPanel()+`<div class="under-wheel"><button id="openCandidates" class="candidate-entry"><span>${(state.activity==='play')?'🎡':'🍽️'}</span><strong>看看候选</strong><small>${available().length} 家</small><span>›</span></button><button id="refresh" class="refresh-entry">↻ 重新生成</button></div><p class="muted sheet-note">${state.live?((state.activity==='play')?'高德场馆与路线数据':'高德餐厅与路线数据'):'演示候选'} · 本轮候选等概率</p>`;
     return;
   }
   const group=state.page==='fair',c=state.config;
-  $('#view').innerHTML=heading('先找美味，再交给好运。','这一餐，让好运帮你选。')+`<div class="discovery-toolbar"><button id="locationMode" class="mode-button">${group?'👫 多人定位':'📍 单人定位'} <span>⌄</span></button><button id="openFilters" class="preference-button">${modeIcon(c.mode)} ${group?'各自的路程':c.mode+' '+c.limit+'分钟'} · ${c.types.length?esc(c.types.join('/')):'口味都行'} <span>筛选</span></button></div>
+  $('#view').innerHTML=((state.activity==='play')?heading('先找好玩的，再交给好运。','这一场，让好运帮你选。'):heading('先找美味，再交给好运。','这一餐，让好运帮你选。'))+`<div class="discovery-toolbar">${(state.activity==='play')?'<span class="mode-button" role="status">📍 单人定位</span>':`<button id="locationMode" class="mode-button">${group?'👫 多人定位':'📍 单人定位'} <span>⌄</span></button>`}<button id="openFilters" class="preference-button">${modeIcon(c.mode)} ${group?'各自的路程':c.mode+' '+c.limit+'分钟'} · ${c.types.length?esc(c.types.join('/')):((state.activity==='play')?'玩什么都行':'口味都行')} <span>筛选</span></button></div>
   <section class="map-stage"><div class="map-search-button"><button id="homeSearch">⌕ 搜索城市、地铁站、商圈</button><button id="homeLocate" aria-label="使用当前位置">⌖</button></div>
     ${state.live?'<div id="homeMap" aria-label="美食地图，点击选择出发点"></div><div id="homeMapLoading" class="home-map-loading">🗺️ 正在打开地图…</div>':demoHomeMap()}
   </section>
   <p class="map-bottom-hint" id="mapHint" role="status">${group?'点击地图，调整当前成员的出发点':'点击地图选择出发点'}${state.live?'':' · 示意地图'}</p>
   <div class="origin-strip" id="originStrip">${originChips()}</div>
   ${state.searchMessage?`<p class="flow-error" role="status">${esc(state.searchMessage)}</p>`:''}
-  <button id="buildWheel" class="btn full build-wheel" ${state.checkingMap?'disabled':''}>生成转盘 <span>✦</span></button><p class="generation-note">先筛选餐厅、核对路程，再去转盘揭晓</p>`;
+  <button id="buildWheel" class="btn full build-wheel" ${state.checkingMap?'disabled':''}>生成转盘 <span>✦</span></button><p class="generation-note">${(state.activity==='play')?'先筛选场馆、核对路程，再去转盘揭晓':'先筛选餐厅、核对路程，再去转盘揭晓'}</p>`;
   if(state.live)mountHomeMap();else bindDemoHome();
 }
 function originChips(){
@@ -85,8 +85,8 @@ function paintHomePins(fit){
     const x=point.x+(nearOrigin?48:0),y=point.y;
     if(visible.length>=5||visible.some(p=>Math.hypot(p.x-x,p.y-y)<75))continue;
     visible.push({x,y});const button=document.createElement('button');button.className='food-map-pin';button.setAttribute('aria-label',store.name);
-    const photo=store.photos?.[0];button.innerHTML=(photo?`<img src="${esc(photo)}" alt="" referrerpolicy="no-referrer">`:'<span>🍜</span>')+`<small>${esc(store.name.slice(0,6))}</small>`;
-    const img=button.querySelector('img');if(img)img.onerror=()=>{img.replaceWith(Object.assign(document.createElement('span'),{textContent:'🍜'}));};
+    const photo=store.photos?.[0];button.innerHTML=(photo?`<img src="${esc(photo)}" alt="" referrerpolicy="no-referrer">`:`<span>${store.emoji||'🍜'}</span>`)+`<small>${esc(store.name.slice(0,6))}</small>`;
+    const img=button.querySelector('img');if(img)img.onerror=()=>{img.replaceWith(Object.assign(document.createElement('span'),{textContent:store.emoji||'🍜'}));};
     const marker=new A.Marker({position:store.location,anchor:'bottom-center',offset:new A.Pixel(nearOrigin?48:0,0),content:button,bubble:false,zIndex:100});
     marker.on('click',()=>detail(store));discovery.markers.push(marker);
   }
@@ -97,8 +97,8 @@ async function loadHomePreviews(){
   const ps=originList().filter(p=>p.location),token=++discovery.previewToken;
   if(!ps.length){discovery.previews=[];return;}
   const center=[0,1].map(i=>ps.reduce((n,p)=>n+p.location[i],0)/ps.length);
-  const config={...state.config,limit:Math.max(...ps.map(p=>p.limit)),mode:ps.some(p=>p.mode==='驾车')?'驾车':ps.some(p=>p.mode==='公共交通')?'公共交通':'步行'};
-  const key=JSON.stringify([center,config.types,config.limit,config.mode]);
+  const config={...state.config,limit:Math.max(...ps.map(p=>p.limit)),mode:ps.some(p=>p.mode==='驾车')?'驾车':ps.some(p=>p.mode==='公共交通')?'公共交通':'步行',activity:state.activity,preview:true};
+  const key=JSON.stringify([center,config.types,config.limit,config.mode,state.activity]);
   $('#mapHint').textContent=state.page==='fair'?'点击地图，调整当前成员的出发点':'点击地图选择出发点';
   try{
     const stores=discovery.cache?.key===key?discovery.cache.stores:await DouxMap.nearby(center,config);
@@ -106,21 +106,21 @@ async function loadHomePreviews(){
     discovery.previews=[];
     for(const store of stores){if(discovery.previews.length>=5)break;if(!discovery.previews.some(p=>Math.hypot(p.location[0]-store.location[0],p.location[1]-store.location[1])<.00065))discovery.previews.push(store);}
     stores.forEach(s=>state.catalog[s.id]=s);paintHomePins(true);
-    if(!stores.length)$('#mapHint').textContent='附近暂未找到餐厅，试试调整位置或筛选。';
+    if(!stores.length)$('#mapHint').textContent='附近暂未找到'+((state.activity==='play')?'场馆':'餐厅')+'，试试调整位置或筛选。';
   }catch(error){if(token===discovery.previewToken&&$('#mapHint')){discovery.previews=[];paintHomePins(false);$('#mapHint').textContent=error.message;}}
 }
 function openLocationMode(){showModal(modalTop('这次，和谁一起吃？')+`<div class="location-choices"><button data-location-mode="single"><span>🙋</span><strong>单人定位</strong><small>以一个出发点寻找附近美食</small></button><button data-location-mode="multi"><span>👫</span><strong>多人定位</strong><small>2～6 个起点，照顾每个人的路程</small></button></div>`);}
 function returnToMap(){state.request++;state.loading=false;state.stage='map';state.searchMessage='';render();window.scrollTo({top:0});}
 function renderGenerating(){
-  const progress=state.progress||{value:5,title:'正在寻找附近美味…',detail:'先找餐厅，再逐一确认路线'};
-  $('#view').innerHTML=`<div class="step-nav"><button id="cancelGeneration">‹ 返回地图</button><span>准备你的转盘</span></div><section class="generation-screen"><div class="loading-plate">🍜<span>✦</span></div><h1>好吃的，正在集合</h1><p id="progressTitle">${esc(progress.title)}</p><div class="progress-track" role="progressbar" aria-label="生成转盘进度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${progress.value}"><div id="progressFill" style="width:${progress.value}%"></div></div><p id="progressDetail" class="muted">${esc(progress.detail)}</p><div class="loading-steps"><span>✓ 定好出发点</span><span>🍽 搜索餐厅</span><span>⌁ 核对路程</span></div><p class="muted">${state.live?'根据实际查询进度更新，不符合条件的店不会入选。':'演示模式，正在模拟候选生成。'}</p><button id="cancelGenerationBottom" class="btn outline sheet-note">取消，回地图调整</button></section>`;
+  const progress=state.progress||{value:5,title:(state.activity==='play')?'正在寻找附近好玩…':'正在寻找附近美味…',detail:(state.activity==='play')?'先找场馆，再逐一确认路线':'先找餐厅，再逐一确认路线'};
+  $('#view').innerHTML=`<div class="step-nav"><button id="cancelGeneration">‹ 返回地图</button><span>准备你的转盘</span></div><section class="generation-screen"><div class="loading-plate">${(state.activity==='play')?'🎡':'🍜'}<span>✦</span></div><h1>${(state.activity==='play')?'好玩的，正在集合':'好吃的，正在集合'}</h1><p id="progressTitle">${esc(progress.title)}</p><div class="progress-track" role="progressbar" aria-label="生成转盘进度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${progress.value}"><div id="progressFill" style="width:${progress.value}%"></div></div><p id="progressDetail" class="muted">${esc(progress.detail)}</p><div class="loading-steps"><span>✓ 定好出发点</span><span>${(state.activity==='play')?'🎡 搜索场馆':'🍽 搜索餐厅'}</span><span>⌁ 核对路程</span></div><p class="muted">${state.live?'根据实际查询进度更新，不符合条件的店不会入选。':'演示模式，正在模拟候选生成。'}</p><button id="cancelGenerationBottom" class="btn outline sheet-note">取消，回地图调整</button></section>`;
 }
 function updateProgress(value,title,detail){
   state.progress={value,title,detail};if(state.stage!=='loading')return;
   const fill=$('#progressFill');if(fill){fill.style.width=value+'%';fill.parentElement.setAttribute('aria-valuenow',value);$('#progressTitle').textContent=title;$('#progressDetail').textContent=detail;}
 }
 async function buildDemoWheel(){
-  const token=++state.request;state.stage='loading';state.loading=true;state.progress={value:15,title:'正在挑选餐厅…',detail:'模拟筛选口味、预算与营业条件'};render();
+  const token=++state.request;state.stage='loading';state.loading=true;state.progress={value:15,title:(state.activity==='play')?'正在挑选场馆…':'正在挑选餐厅…',detail:(state.activity==='play')?'模拟筛选类型、预算与路程条件':'模拟筛选口味、预算与营业条件'};render();
   await new Promise(r=>setTimeout(r,350));if(token!==state.request)return;
   updateProgress(65,'正在核对路程…','逐一比较每个人的时间限制');
   const selected=eligible().slice(0,state.config.count);
