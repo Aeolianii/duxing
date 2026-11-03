@@ -154,7 +154,7 @@ function handleCompactAction(button){
       discovery.previews=[];discovery.cache=null;state.live=!state.live;state.origin=state.live?{name:'选择真实出发点',location:null}:{...places[0]};
       state.drawn.clear();state.excluded.clear();$('#modal').close();generate();render();updateSource();break;
     case 'openRules':showModal(modalTop('✨ 把纠结交给好运')+'<p class="detail-copy">每个候选被抽中的概率相同。点击开始就确定结果，转动期间优先获取中奖店资料，展示后再补充其他候选。<br><br>开启“本轮不重复”后，已抽中的店不会再次出现。新一轮会清除已抽与本轮排除记录。</p>');break;
-    case 'help':showModal(modalTop('你好，这里是都行 ✿')+'<p class="detail-copy">地图选点 → 生成转盘 → 开始抽取。<br>详细设置都藏在卡片按钮里，点击就能展开。<br><br>地图上的“定位方式”可以切换单人、多人；“自选”放入纠结的店。收藏与到店记录保存在当前浏览器，清除站点数据会删除它们。</p>');break;
+    case 'help':showModal(modalTop('你好，这里是随便 ✿')+'<p class="detail-copy">地图选点 → 生成转盘 → 开始抽取。<br>详细设置都藏在卡片按钮里，点击就能展开。<br><br>地图上的“定位方式”可以切换单人、多人；“自选”放入纠结的店。收藏与到店记录保存在当前浏览器，清除站点数据会删除它们。</p>');break;
     default:return false;
   }
   return true;
