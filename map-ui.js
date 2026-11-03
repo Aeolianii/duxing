@@ -80,7 +80,7 @@ async function refreshCandidates(){
         for(const origin of origins){if(token!==state.request||Date.now()-start>=limit)return;times.push(await DouxMap.route(origin.location,store.location,origin.mode,{city:origin.city,cityd:store.city}));}
         completed++;
         if(DouxMap.eligible(store,config,times,origins.map(p=>p.limit))){
-          const candidate={...store,times,max:Math.max(...times),gap:Math.max(...times)-Math.min(...times),sum:times.reduce((a,b)=>a+b,0),opening:null,routeMode:config.mode==='公共交通'?'公交/地铁（含步行）':config.mode};
+          const candidate={...store,times,max:Math.max(...times),gap:Math.max(...times)-Math.min(...times),sum:times.reduce((a,b)=>a+b,0),opening:null,routeMode:config.mode==='公共交通'?'公交/地铁（含步行）':config.mode,routeKey:routeContext(store).key,routeCheckedAt:Date.now(),routeStatus:'ready'};
           matches.push(candidate);
         }
       }catch{failures++;}
@@ -94,7 +94,49 @@ async function refreshCandidates(){
   finally{if(token===state.request){state.loading=false;state.stage=state.candidates.length?'wheel':'map';if(state.candidates.length)updateProgress(100,'候选已就位','转盘已准备好');render();window.scrollTo({top:0});}}
 }
 const detailTasks=new Map(),detailCache=new Map();
+const routeTasks=new Map();
+function routeContext(store){
+  const origins=realOrigins().map(p=>({location:p.location,city:p.city,mode:p.mode,limit:p.limit}));
+  return {origins,key:JSON.stringify([state.live,store.location,store.city,origins])};
+}
+async function ensureStoreRoute(store,force=false){
+  if(store.source!=='amap'||store.manual)return;
+  const {origins,key}=routeContext(store),token=state.request;
+  if(!force&&store.routeKey===key&&Number.isFinite(store.max)&&Date.now()-store.routeCheckedAt<300000)return;
+  if(!force&&store.routeKey===key&&store.routeStatus==='error')return;
+  delete store.max;delete store.times;delete store.gap;delete store.sum;
+  store.routeKey=key;
+  if(!state.live||origins.some(p=>!p.location)){store.routeStatus='missing-origin';return;}
+  if(!store.location){store.routeStatus='unlinked';return;}
+  store.routeStatus='loading';
+  if(!routeTasks.has(key)){
+    let expired=false,timer;
+    const work=(async()=>{
+      const times=[];
+      for(const origin of origins){
+        if(expired)throw new Error('route timeout');
+        const time=await DouxMap.route(origin.location,store.location,origin.mode,{city:origin.city,cityd:store.city});
+        if(!Number.isFinite(time)||time<0)throw new Error('no route');
+        times.push(time);
+      }
+      return {times,max:Math.max(...times),gap:Math.max(...times)-Math.min(...times),sum:times.reduce((a,b)=>a+b,0),routeMode:origins.length>1?'多人最长路程':origins[0].mode,routeCheckedAt:Date.now(),routeStatus:'ready'};
+    })();
+    const task=Promise.race([work,new Promise((_,reject)=>timer=setTimeout(()=>{expired=true;reject(new Error('route timeout'));},12000))])
+      .finally(()=>{clearTimeout(timer);routeTasks.delete(key);});
+    routeTasks.set(key,task);
+  }
+  try{
+    const result=await routeTasks.get(key);
+    if(token===state.request&&routeContext(store).key===key)Object.assign(store,result);
+  }catch{
+    if(token===state.request&&routeContext(store).key===key)store.routeStatus='error';
+  }
+}
 async function prepareDetails(store,delay){
+  const [ok]=await Promise.all([prepareMerchantDetails(store,delay),ensureStoreRoute(store)]);
+  return ok;
+}
+async function prepareMerchantDetails(store,delay){
   if(store.source!=='amap'){if(!store.manual)await new Promise(resolve=>setTimeout(resolve,delay));return true;}
   const key=JSON.stringify([store.poiId,store.poiName||store.name,store.address]);
   const hit=detailCache.get(key);
@@ -106,7 +148,10 @@ async function prepareDetails(store,delay){
       (async()=>{try{
         const details=await DouxMap.details(store);
         // Only merge merchant details; a shared request must not overwrite a newer route or display name.
-        for(const field of ['photos','phone','rating','price','hours','category'])if(details[field]!==undefined)result[field]=details[field];
+        for(const field of ['photos','phone','rating','price','hours','category']){
+          const value=details[field];
+          if(value!=null&&value!==''&&(!Array.isArray(value)||value.length))result[field]=value;
+        }
         result.detailError=false;
       }catch{result.detailError=true;}})(),
       (async()=>{if(typeof DouxAI==='undefined')return;try{result.ai=await DouxAI.research(store);}catch(error){result.ai={status:'error',error:error.name==='TimeoutError'?'资料检索超时，请重试':error.message};}})()
@@ -118,7 +163,7 @@ async function prepareDetails(store,delay){
   if(['ready','empty'].includes(store.ai?.status)){
     if(detailCache.size>=200)detailCache.delete(detailCache.keys().next().value);
     const fields=['photos','phone','rating','price','hours','category','detailError','ai'];
-    detailCache.set(key,Object.fromEntries(fields.filter(k=>store[k]!==undefined).map(k=>[k,store[k]])));
+    detailCache.set(key,Object.fromEntries(fields.filter(k=>store[k]!=null&&store[k]!==''&&(!Array.isArray(store[k])||store[k].length)).map(k=>[k,store[k]])));
   }
   if(state.candidates?.some(s=>s.id===store.id))state.catalog[store.id]=store;
   return store.ai?.status!=='error';
@@ -139,7 +184,7 @@ async function validateCustom(){
     if(store.manual)continue;
     if(store.source==='amap'){
       try{const time=await DouxMap.route(origin.location,store.location,config.mode);
-        if(DouxMap.eligible(store,config,[time],[config.limit]))accepted.push({...store,times:[time],max:time,opening:null,routeMode:config.mode});
+        if(DouxMap.eligible(store,config,[time],[config.limit]))accepted.push({...store,times:[time],max:time,opening:null,routeMode:config.mode,routeKey:routeContext(store).key,routeCheckedAt:Date.now(),routeStatus:'ready'});
       }catch{failed++;}
     }else if(!state.live){const checked=Doux.evaluate(store,config,[{...origin,mode:config.mode,limit:config.limit}]);if(checked.eligible)accepted.push(checked);}
   }

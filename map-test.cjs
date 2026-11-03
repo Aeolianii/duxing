@@ -173,7 +173,52 @@ test('共享及缓存资料不会覆盖新路线或自定义显示名称',async(
   h.DouxAI={research:async()=>({status:'ready',retrievedAt:new Date().toISOString()})};
   const original={id:'real',source:'amap',poiId:'A',name:'真实店',address:'地址',max:12};
   const newer={...original,name:'我的别名',poiName:'真实店',max:5};
-  const a=h.prepareDetails(original,0),b=h.prepareDetails(newer,0);finish();await Promise.all([a,b]);
+  const a=h.prepareMerchantDetails(original,0),b=h.prepareMerchantDetails(newer,0);finish();await Promise.all([a,b]);
   assert.equal(calls,1);assert.equal(newer.max,5);assert.equal(newer.name,'我的别名');assert.equal(newer.phone,'020-123');
-  await h.prepareDetails(newer,0);assert.equal(calls,1);assert.equal(newer.max,5);
+  await h.prepareMerchantDetails(newer,0);assert.equal(calls,1);assert.equal(newer.max,5);
+});
+
+test('详情空值保留已有评分、人均和图片，有效新值正常更新',()=>{
+  const old={id:'amap-A',poiId:'A',name:'别名',poiName:'真实店',rating:4.6,price:80,photos:['https://example.com/photo.jpg'],phone:'123',location:[113,23]};
+  const kept=adapter.mergeDetails(old,{id:'A',name:'真实店',biz_ext:{rating:[],cost:''},photos:[],tel:''});
+  assert.equal(kept.rating,4.6);assert.equal(kept.price,80);assert.deepEqual(kept.photos,old.photos);assert.equal(kept.phone,'123');assert.equal(kept.name,'别名');assert.deepEqual(kept.location,old.location);
+  const updated=adapter.mergeDetails(old,{id:'A',biz_ext:{rating:'4.8',cost:'95'}});
+  assert.equal(updated.rating,4.8);assert.equal(updated.price,95);
+});
+
+test('资料层及缓存的空值不覆盖调用方已有商业数据',async()=>{
+  const h=harness({details:async()=>({rating:null,price:null,photos:[],phone:''})});
+  h.DouxAI={research:async()=>({status:'ready',retrievedAt:new Date().toISOString()})};
+  const s={id:'real',poiId:'A',name:'真实店',address:'地址',source:'amap',rating:4.5,price:60,photos:['photo']};
+  await h.prepareMerchantDetails(s,0);assert.equal(s.rating,4.5);assert.equal(s.price,60);assert.deepEqual(s.photos,['photo']);
+  const blank={...s,poiId:'B',rating:null,price:null};await h.prepareMerchantDetails(blank,0);
+  const richer={...blank,rating:4.9,price:100};await h.prepareMerchantDetails(richer,0);
+  assert.equal(richer.rating,4.9);assert.equal(richer.price,100);
+});
+
+test('自选门店自动核对路程，复用相同请求并随起点或出行方式刷新',async()=>{
+  let calls=0;
+  const h=harness({route:async(from,_to,mode)=>{calls++;return mode==='驾车'?5:from[0]===113?12:20;}});
+  h.state.page='custom';const s={source:'amap',location:[114,23]};
+  await Promise.all([h.ensureStoreRoute(s),h.ensureStoreRoute(s)]);
+  assert.equal(calls,1);assert.equal(s.max,12);assert.equal(s.routeStatus,'ready');
+  await h.ensureStoreRoute(s);assert.equal(calls,1);
+  h.state.origin.location=[112,23];await h.ensureStoreRoute(s);assert.equal(s.max,20);
+  h.state.config.mode='驾车';await h.ensureStoreRoute(s);assert.equal(s.max,5);assert.equal(s.routeMode,'驾车');
+});
+
+test('缺少起点清除旧路线；请求失败可主动重试，未知耗时不作为零分钟',async()=>{
+  let calls=0;
+  const h=harness({route:async()=>++calls===1?null:8}),s={source:'amap',location:[114,23],max:99};
+  h.state.origin.location=null;await h.ensureStoreRoute(s);assert.equal(s.max,undefined);assert.equal(s.routeStatus,'missing-origin');assert.equal(calls,0);
+  h.state.origin.location=[113,23];await h.ensureStoreRoute(s);assert.equal(s.routeStatus,'error');assert.equal(s.max,undefined);
+  await h.ensureStoreRoute(s);assert.equal(calls,1);
+  await h.ensureStoreRoute(s,true);assert.equal(s.max,8);assert.equal(s.routeStatus,'ready');
+});
+
+test('旧路线响应不覆盖更换起点后的耗时',async()=>{
+  let finish;
+  const h=harness({route:async from=>from[0]===113?new Promise(r=>finish=r):4}),s={source:'amap',location:[114,23]};
+  const old=h.ensureStoreRoute(s);h.state.origin.location=[112,23];h.state.request++;
+  await h.ensureStoreRoute(s);finish(30);await old;assert.equal(s.max,4);
 });

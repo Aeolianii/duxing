@@ -19,6 +19,16 @@
     const time = result?.routes?.[0]?.time;
     return typeof time === 'number' && Number.isFinite(time) && time >= 0 ? Math.ceil(time / 60) : null;
   }
+  function mergeDetails(store, poi) {
+    const next={...store},normalized=normalize(poi);
+    for(const [key,value] of Object.entries(normalized)){
+      if(value==null||value===''||(Array.isArray(value)&&!value.length))continue;
+      if(['emoji','color','type'].includes(key)&&store[key])continue;
+      if(key==='name'&&store.poiName)continue;
+      next[key]=value;
+    }
+    return next;
+  }
   function transitMinutes(result){
     const plans=(result?.plans||[]).filter(p=>Number.isFinite(p.time)&&p.time>=0&&!p.segments?.some(s=>['TAXI','RAILWAY'].includes(s.transit_mode)));
     return plans.length?Math.ceil(Math.min(...plans.map(p=>p.time))/60):null;
@@ -197,7 +207,7 @@
     const result = await call(done => new A.PlaceSearch({extensions:'all'}).getDetails(store.poiId,done),8000);
     const poi = result?.poiList?.pois?.find(p=>p.id===store.poiId);
     if (!poi) return store;
-    const next = {...store, ...normalize(poi)};
+    const next = mergeDetails(store, poi);
     next.emoji = store.emoji || next.emoji;
     next.color = store.color || next.color;
     next.activity = store.activity || next.activity;
@@ -210,6 +220,6 @@
     if(!point) throw new Error('未获取到定位，请在地图上手动选点');
     return {location:point,name:result.formattedAddress || '我的位置'};
   }
-  const api={coordinates,normalize,routeMinutes,transitMinutes,cityAt,eligible,matchesCuisine,matchesPlay,playQueries,playTypes:Object.keys(playQueries),decoratePlay,playEmoji,call,load,search,nearby,route,details,locate};
+  const api={coordinates,normalize,mergeDetails,routeMinutes,transitMinutes,cityAt,eligible,matchesCuisine,matchesPlay,playQueries,playTypes:Object.keys(playQueries),decoratePlay,playEmoji,call,load,search,nearby,route,details,locate};
   if(typeof module!=='undefined') module.exports=api; else root.DouxMap=api;
 })(typeof window!=='undefined'?window:globalThis);

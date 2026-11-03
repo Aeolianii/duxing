@@ -111,3 +111,12 @@ test('中奖店服务失败或页面隐藏时不启动背景队列',async()=>{
   calls.length=0;h=harness(s=>{calls.push(s.id);return Promise.resolve(true);});h.context.document.hidden=true;
   await h.context.spin();assert.deepEqual(calls,['amap-A']);
 });
+
+test('详情卡片区分缺失商业数据、缺少起点和路线错误，并显示有效值',()=>{
+  const h=harness(async()=>true);
+  assert.match(h.context.statsHTML({source:'amap',routeStatus:'missing-origin'}),/高德未提供/);
+  assert.match(h.context.statsHTML({source:'amap',routeStatus:'missing-origin'}),/请先选择出发点/);
+  assert.match(h.context.statsHTML({source:'amap',routeStatus:'error'}),/路线获取失败/);
+  const html=h.context.statsHTML({source:'amap',rating:4.8,price:90,max:12,routeStatus:'ready',routeMode:'步行'});
+  for(const value of ['4.8','¥90','12 分钟','步行'])assert.ok(html.includes(value));
+});

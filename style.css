@@ -171,3 +171,5 @@ dialog{max-height:90vh;max-height:90dvh}
 .wheel-spark{font-size:28px;filter:drop-shadow(0 2px 0 #fff)}
 @keyframes pointer-bob{0%,100%{transform:translateY(0)}50%{transform:translateY(2px)}}
 @media(prefers-reduced-motion:reduce){.pointer{animation:none}}
+
+.result-stats .stat{min-width:0}.result-stats .stat-note{font-size:13px;line-height:1.6;overflow-wrap:anywhere}.result-stats>#refreshStoreRoute{grid-column:1/-1;justify-self:end;font-size:12px}
