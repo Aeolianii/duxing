@@ -116,10 +116,18 @@ function aiHTML(s){
   if(!ai)return '<p class="muted">正在准备地点介绍与资料来源…</p>';
   if(ai.status==='loading')return '<p class="muted" role="status">正在整理这个地点的介绍与资料来源，先看看基础信息…</p>';
   if(ai.status==='error')return `<p class="muted">${esc(ai.error)}</p><button class="btn secondary small" id="retryAI">重试资料</button>`;
-  if(ai.status==='empty')return '<p class="muted">暂未获取到可靠介绍，已保留地点基础信息，你可以稍后重新查询。</p><button class="btn secondary small" id="retryAI">重新查询资料</button>';
+  if(ai.status==='empty'){
+    const reason=ai.harness?.reason;
+    const message=ai.harness?.serviceUnavailable?(reason==='timeout'?'资料查询超时，请稍后重试。':'资料服务暂时不可用，请稍后重试。'):
+      reason==='no_sources'?'这次搜索没有返回可用的介绍资料。':
+      ['no_relevant_sources','identity_unconfirmed'].includes(reason)?'找到了相关网页，但暂未核实这家分店或对应品牌的介绍。':
+      reason?'搜到了资料，但整理结果未通过核对，可以重新查询。':'暂未获取到可靠介绍，可以稍后重新查询。';
+    return `<p class="muted">${message}已保留地点基础信息。</p><button class="btn secondary small" id="retryAI">重新查询资料</button>`;
+  }
   const rawReview=typeof ai.reviewSummary==='string'?ai.reviewSummary.trim():'';
   const review=rawReview||'暂无相关评价。';
-  return `<b>AI 整理 · ${esc(ai.model)}</b><p class="detail-copy"><b>介绍</b><br>${esc(ai.introduction||'暂无可核实的同店介绍。')}</p>${review?`<p class="detail-copy"><b>评价</b><br>${esc(review)}</p>`:''}<p class="muted">基于搜索摘要，资料有限；请核对具体分店。</p><div class="section-list">${(ai.evidence||[]).map(e=>`<a href="${esc(e.url)}" target="_blank" rel="noopener noreferrer">${esc(e.title||'查看来源')} ↗</a>`).join('')}</div>`;
+  const brand=ai.scope==='brand';
+  return `<b>AI 整理 · ${esc(ai.model)}</b>${brand?`<p class="muted">以下为「${esc(ai.brandName||'该品牌')}」的通用资料，尚未核实这家分店的具体特色与服务。</p>`:''}<p class="detail-copy"><b>${brand?'品牌介绍':'介绍'}</b><br>${esc(ai.introduction||'暂无可核实的同店介绍。')}</p>${review?`<p class="detail-copy"><b>${brand?'本店评价':'评价'}</b><br>${esc(brand?'暂无可核实的本店评价。':review)}</p>`:''}<p class="muted">基于搜索摘要，资料有限；请核对具体分店。</p><div class="section-list">${(ai.evidence||[]).map(e=>`<a href="${esc(e.url)}" target="_blank" rel="noopener noreferrer">${esc(e.title||'查看来源')} ↗</a>`).join('')}</div>`;
 }
 function updateAI(s){updateSelectionReason(s);const el=$('#aiDetails');if(el&&el.dataset.store===s.id&&$('#modal').open)el.innerHTML=aiHTML(s)}
 async function retryAI(){
@@ -130,12 +138,13 @@ async function retryAI(){
 }
 function selectionReasonHTML(s){
   const play=s.activity==='play',ai=s.ai;
-  const generated=ai?.status==='ready'&&typeof ai.selectionReason==='string'&&ai.selectionReason.trim();
+  const generated=ai?.status==='ready'&&ai.scope!=='brand'&&typeof ai.selectionReason==='string'&&ai.selectionReason.trim();
   const name=s.poiName||s.name;
   let copy=generated;
   if(!copy){
     if(s.manual)copy=`这是你亲自加入的选项「${name}」，这次由转盘随机抽中。尚未关联真实${play?'场馆':'门店'}，出发前记得确认具体地点。`;
     else if(s.source!=='amap')copy=`${s.intro||name}。这是演示候选，本轮随机抽中它，让今天的${play?'玩乐':'用餐'}多一点惊喜。`;
+    else if(ai?.status==='ready'&&ai.scope==='brand')copy=`这次转盘随机抽中了「${name}」。已找到「${ai.brandName||'该品牌'}」的品牌介绍，可先了解菜系与品牌特色；这家分店的实际体验仍需确认。`;
     else copy=`这次转盘随机抽中了「${name}」。${ai?.status==='loading'?'AI 正在结合公开资料整理它的特色，稍后会补充在这里。':ai?.status==='error'?'AI 解读暂时未获取，可在下方重试资料。':'目前可靠资料有限，可以先核对地址和路线，再决定是否出发。'}`;
   }
   const facts=[];

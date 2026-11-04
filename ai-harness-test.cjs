@@ -99,6 +99,53 @@ test('真实接口常见的换行折叠可通过引用校验，字词改写或�
   }
 });
 
+test('摘要中的 Markdown 加粗标记不会把真实的连续引文误判为伪造',async()=>{
+  const formatted={...source,summary:'**· 测试餐厅(南门店)**\n\n **广州市南门路1号，主营粤菜**'};
+  const h=fixture(({stage})=>{
+    if(stage==='search')return json({results:[formatted]});
+    if(stage==='review')return complete({assessments:[{index:0,relevance:'DIRECT_RELEVANT',quote:'测试餐厅(南门店)\n\n **广州市南门路1号，主营粤菜**'}]});
+  });
+  const result=await h.research(store);assert.equal(result.status,'ready');assert.equal(result.harness.attempts,1);
+});
+
+test('分店资料不足时第二轮只搜索品牌，结果标记为品牌资料且不输出分店评价',async()=>{
+  const brandSource={title:'测试餐厅品牌介绍',url:'https://example.com/brand',summary:'测试餐厅是主营粤式点心的连锁餐饮品牌。'};
+  let searches=0;
+  const h=fixture(({stage,body})=>{
+    if(stage==='search')return json({results:++searches===1?[]:[brandSource]});
+    const input=JSON.parse(body.messages[1].content);
+    assert.equal(input.store.name,'测试餐厅');assert.equal(input.store.address,undefined);assert.equal(input.store.city,undefined);
+    if(stage==='review')return complete({assessments:[{index:0,relevance:'DIRECT_RELEVANT',quote:brandSource.summary}]});
+    assert.match(body.messages[0].content,/品牌的通用介绍/);
+    return complete({...draft,introduction:'测试餐厅是主营粤式点心的连锁餐饮品牌。',reviewSummary:'另一家店服务好。',selectionReason:'AI挑选了这家店。',citations:[{index:0,quote:brandSource.summary}]});
+  });
+  const result=await h.research(store);
+  assert.equal(result.status,'ready');assert.equal(result.scope,'brand');assert.equal(result.brandName,'测试餐厅');
+  assert.equal(result.reviewSummary,'暂无可核实的本店评价。');assert.equal(result.selectionReason,'');
+  assert.equal(h.calls.find(c=>c.stage==='search'&&c.body.query==='测试餐厅 品牌介绍').body.query,'测试餐厅 品牌介绍');
+  assert.ok(h.traces[0].steps.some(s=>s.stage==='brand_fallback'));assert.equal(result.harness.toolCalls,4);
+});
+
+test('没有明确分店后缀或游玩场馆不使用餐饮品牌兜底',async()=>{
+  for(const input of [{...store,name:'独立小店'},{...store,activity:'play'}]) {
+    const h=fixture(({stage})=>stage==='search'?json({results:[]}):null);
+    const result=await h.research(input);
+    assert.equal(result.status,'empty');assert.ok(h.calls.filter(c=>c.stage==='search').every(c=>c.body.query.includes(input.name)));
+    assert.ok(h.traces[0].steps.every(s=>s.stage!=='brand_fallback'));
+  }
+});
+
+test('只有匹配地址的招聘登记资料时不冒充店铺介绍，而是转查品牌',async()=>{
+  let searches=0;
+  const h=fixture(({stage})=>{
+    if(stage==='search')return json({results:++searches===1?[{...source,title:'测试餐厅招聘',summary:source.summary}]:[source]});
+  });
+  const result=await h.research(store);
+  assert.equal(result.status,'ready');assert.equal(result.scope,'brand');
+  assert.equal(h.calls.filter(c=>c.stage==='review').length,1);
+  assert.ok(h.traces[0].steps.some(s=>s.reason==='administrative_source'));
+});
+
 test('地点榜单被程序排除，模型误报直接相关也不能把榜单交给整理阶段',async()=>{
   const roundup={title:'广州 50 大夜间人气景点',url:'https://example.com/toplist/guangzhou',summary:source.summary};
   const h=fixture(({stage,body})=>{

@@ -195,6 +195,24 @@ test('结果理由展示真实 AI 段落、转义内容，并随当前路程变�
   assert.doesNotMatch(h.context.selectionReasonHTML({...food,ai:{status:'empty',selectionReason:'不能采用的无证据解读'}}),/不能采用/);
 });
 
+test('品牌兜底明确标注通用介绍，本店评价和随机抽取理由不冒用其他门店内容',()=>{
+  const h=harness(async()=>true);
+  const input={...store,ai:{status:'ready',scope:'brand',brandName:'测试餐厅',model:'deepseek-flash',introduction:'品牌菜系介绍',reviewSummary:'不应展示的其他门店评价',selectionReason:'不应采用的本店体验',evidence:[]}};
+  const html=h.context.aiHTML(input),reason=h.context.selectionReasonHTML(input);
+  assert.match(html,/品牌介绍/);assert.match(html,/通用资料/);assert.match(html,/暂无可核实的本店评价/);
+  assert.doesNotMatch(html,/不应展示/);assert.match(reason,/随机抽中/);assert.match(reason,/品牌介绍/);assert.doesNotMatch(reason,/不应采用/);
+});
+
+test('空资料显示原因，服务超时与分店不匹配不能显示成相同的无信息提示',()=>{
+  const h=harness(async()=>true);
+  const render=harness=>h.context.aiHTML({...store,ai:{status:'empty',harness}});
+  assert.match(render({reason:'no_sources'}),/搜索没有返回/);
+  assert.match(render({reason:'identity_unconfirmed'}),/找到了相关网页/);
+  assert.match(render({reason:'invalid_citations'}),/整理结果未通过核对/);
+  assert.match(render({reason:'timeout',serviceUnavailable:true}),/查询超时/);
+  assert.match(render({reason:'upstream_503',serviceUnavailable:true}),/服务暂时不可用/);
+});
+
 test('通用转盘仅发送中奖名称，检索摘要后生成带来源的简要介绍',async()=>{
   const calls=[],summary='广州塔是广州的城市地标，可欣赏城市景观。';
   const server=createServer({config:{deepseekKey:'test'},traceStore:{record(){}},fetcher:async(url,options)=>{
