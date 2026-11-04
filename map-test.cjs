@@ -222,3 +222,45 @@ test('旧路线响应不覆盖更换起点后的耗时',async()=>{
   const old=h.ensureStoreRoute(s);h.state.origin.location=[112,23];h.state.request++;
   await h.ensureStoreRoute(s);finish(30);await old;assert.equal(s.max,4);
 });
+
+
+test('多人搜索照顾步行成员，第一处不合适时补查其他区域并对相同门店去重',async()=>{
+  const searches=[],routes=[];
+  const store={id:'bad',location:[113.11,23],price:30},good={id:'good',location:[113.001,23],price:30};
+  const h=harness({nearby:async(point)=>{searches.push(point);return searches.length===1?[store]:[store,good];},route:async(from,to)=>{routes.push(to[0]);return to[0]===store.location[0]?99:10;}});
+  h.state.page='fair';h.state.config.count=1;h.state.people=[{origin:{location:[113,23]},mode:'步行',limit:15},{origin:{location:[113.3,23]},mode:'驾车',limit:60}];
+  await h.refreshCandidates();assert.ok(searches.length>1);assert.ok(searches[0][0]<113.05,'初始中心靠近可达范围较小的成员');
+  assert.deepEqual(Array.from(h.state.candidates,s=>s.id),['good']);assert.equal(routes.filter(x=>x===store.location[0]).length,1,'一人超时即淘汰，跨区域不重复检查');assert.deepEqual(Array.from(h.state.candidates[0].times),[10,10]);
+});
+test('地图查询失败与严格预算无匹配分别提示，不误报为路程不符合',async()=>{
+  const broken=harness({nearby:async()=>{throw new Error('高德请求超时');}});await broken.refreshCandidates();assert.match(broken.state.searchMessage,/地图查询失败/);
+  const budget=harness({nearby:async()=>[{id:'expensive',location:[113,23],price:100}],route:async()=>{throw new Error('不应查询路线');}});
+  budget.state.config.budget=50;await budget.refreshCandidates();assert.match(budget.state.searchMessage,/预算/);
+});
+test('多人核对超过旧 45 秒仍能完成全部成员路线，缺失路线仍不能入选',async()=>{
+  let now=0;
+  const h=harness({nearby:async()=>[{id:'slow',location:[113.01,23],price:30}],route:async()=>{now+=16000;return 10;}});
+  h.Date={now:()=>now};h.state.page='fair';h.state.config.count=1;h.state.people=Array.from({length:4},()=>({origin:{location:[113,23]},mode:'步行',limit:60}));
+  await h.refreshCandidates();assert.equal(h.state.candidates.length,1);assert.equal(h.state.candidates[0].times.length,4);
+  h.DouxMap.route=async()=>null;now=0;await h.refreshCandidates();assert.equal(h.state.candidates.length,0);assert.match(h.state.searchMessage,/查询失败/);
+});
+test('真实路线缓存忽略时间上限但区分出行方式，强制刷新和错误重试生效',async()=>{
+  let calls=0,fail=false;
+  const AMap={plugin(_n,done){done();},Walking:class{search(_f,_t,done){calls++;done(fail?'error':'complete',fail?{info:'INVALID_USER_KEY'}:{routes:[{time:600}]});}},Driving:class{search(_f,_t,done){calls++;done('complete',{routes:[{time:180}]});}}};
+  const context={window:{AMap},location:{origin:'http://localhost'},document:{createElement:()=>({remove(){}}),head:{append(script){script.onload();}}},fetch:async()=>({ok:true,json:async()=>({configured:true,key:'test'})}),AbortSignal,setTimeout:(f,ms)=>setTimeout(f,ms===12000?ms:0),clearTimeout};
+  vm.createContext(context);vm.runInContext(fs.readFileSync(__dirname+'/amap-client.js','utf8'),context);const map=context.window.DouxMap;
+  const a=[113,23],b=[113.01,23];await Promise.all([map.route(a,b,'步行'),map.route(a,b,'步行')]);assert.equal(calls,1);
+  assert.equal(await map.route(a,b,'步行'),10);assert.equal(calls,1);assert.equal(await map.route(a,b,'驾车'),3);assert.equal(calls,2);
+  await map.route(a,b,'步行',{force:true});assert.equal(calls,3);
+  fail=true;await assert.rejects(map.route(a,[113.02,23],'步行'));fail=false;assert.equal(await map.route(a,[113.02,23],'步行'),10);assert.equal(calls,5);
+});
+
+
+test('美食多菜系串行查询，单分类失败保留其他结果并支持补查第二页',async()=>{
+  let active=0,peak=0;const calls=[];
+  const AMap={plugin(_n,done){done();},PlaceSearch:class{constructor(options){this.options=options;}searchNearBy(_q,_p,_r,done){calls.push(this.options);active++;peak=Math.max(peak,active);setTimeout(()=>{active--;if(this.options.type==='050203')done('error',{info:'CUQPS_HAS_EXCEEDED_THE_LIMIT'});else done('complete',{poiList:{pois:[{id:'food',name:'餐厅',location:'113,23',typecode:'050202',type:'餐饮服务'}]}});},1);}}};
+  const context={window:{AMap},location:{origin:'http://localhost'},document:{createElement:()=>({remove(){}}),head:{append(script){script.onload();}}},fetch:async()=>({ok:true,json:async()=>({configured:true,key:'test'})}),AbortSignal,setTimeout:(f,ms)=>setTimeout(f,ms===12000?ms:0),clearTimeout};
+  vm.createContext(context);vm.runInContext(fs.readFileSync(__dirname+'/amap-client.js','utf8'),context);
+  const result=await context.window.DouxMap.nearby([113,23],{types:['日料','韩餐'],mode:'步行',limit:30,pageIndex:2});
+  assert.equal(peak,1);assert.equal(result.length,1);assert.ok(calls.every(c=>c.pageIndex===2));
+});

@@ -160,11 +160,17 @@
       }
       return [...unique.values()];
     }
-    const queries=config.types.length?config.types.map(t=>cuisineQueries[t]):[{type:'050000'}];
-    const groups=await Promise.all(queries.map(async query=>{
-      const result=await call(done=>new A.PlaceSearch({type:query.type,pageSize:20,extensions:'all'}).searchNearBy(query.keyword||'',origin,radius,done));
-      return (result?.poiList?.pois||[]).map(normalize).filter(p=>p.location&&matchesCuisine(p,config.types));
-    }));
+    const queries=config.types.length?config.types.map(t=>cuisineQueries[t]).filter(Boolean):[{type:'050000'}];
+    const groups=[];let lastError;
+    for(const query of queries){
+      if(config.cancelled?.())break;
+      try{
+        await waitRouteSlot('place');
+        const result=await call(done=>new A.PlaceSearch({type:query.type,pageSize:20,pageIndex:config.pageIndex||1,extensions:'all'}).searchNearBy(query.keyword||'',origin,radius,done));
+        groups.push((result?.poiList?.pois||[]).map(normalize).filter(p=>p.location&&matchesCuisine(p,config.types)));
+      }catch(error){lastError=error;}
+    }
+    if(!groups.length&&lastError)throw lastError;
     const unique=new Map();
     for(let row=0;row<20&&unique.size<20;row++)for(const group of groups){if(group[row]&&unique.size<20)unique.set(group[row].id,group[row]);}
     return [...unique.values()];
@@ -186,7 +192,25 @@
     routeSlots.set(mode,slot+1150);
     if(slot>now)await new Promise(resolve=>setTimeout(resolve,slot-now));
   }
+  const routeCache=new Map(),routePending=new Map();
   async function route(from,to,mode,context={}) {
+    const key=JSON.stringify([from,to,mode,context.city||'',context.cityd||'']);
+    const cached=routeCache.get(key);
+    if(!context.force&&cached&&Date.now()-cached.at<300000)return cached.minutes;
+    if(routePending.has(key))return routePending.get(key);
+    const task=(async()=>{
+      let minutes;
+      try{minutes=await queryRoute(from,to,mode,context);}
+      catch(error){if(!/超时|QPS|BUSY|SERVICE_NOT_AVAILABLE/.test(error.message))throw error;minutes=await queryRoute(from,to,mode,context);}
+      if(Number.isFinite(minutes)){
+        if(routeCache.size>=600)routeCache.delete(routeCache.keys().next().value);
+        routeCache.set(key,{minutes,at:Date.now()});
+      }
+      return minutes;
+    })().finally(()=>routePending.delete(key));
+    routePending.set(key,task);return task;
+  }
+  async function queryRoute(from,to,mode,context={}) {
     const A = await load();
     if(mode==='公共交通'){
       const city=context.city||await cityAt(from),cityd=context.cityd||await cityAt(to);

@@ -69,3 +69,46 @@ test('放轻松保留必去地点，修改不会波及其他天',()=>{
   const h=harness();h.t.plan=travelCore.createPlan(city('厦门'),conditions,'p');h.t.plan.days[0].spots.push({id:'must',name:'必去地点',must:true});const other=JSON.stringify(h.t.plan.days[1]);
   h.context.handleTravelAction({id:'travelLight',dataset:{}});assert.deepEqual(Array.from(h.t.plan.days[0].spots,s=>s.name),['必去地点']);assert.equal(JSON.stringify(h.t.plan.days[1]),other);
 });
+
+
+test('24 座城市的 1～7 天行程每天都有景点，慢节奏与整日景区约束保留',()=>{
+  for(const c of travelCore.cities)for(let days=1;days<=7;days++)for(const slow of [false,true]){
+    const plan=travelCore.createPlan(c,{...conditions,days,children:slow,themes:['主题乐园']},'p');
+    assert.equal(plan.days.length,days);
+    for(const day of plan.days){assert.ok(day.spots.length>0,`${c.name} ${days}天`);if(slow||day.spots.some(s=>s.fullDay))assert.equal(day.spots.length,1);}
+    const ids=plan.days.flatMap(d=>d.spots.map(s=>s.id));assert.equal(new Set(ids).size,ids.length);
+  }
+});
+test('旧行程可补全空白天且不改动已有安排、必去地点和保存快照',()=>{
+  const h=harness();h.t.plan=travelCore.createPlan(city('厦门'),{...conditions,days:7},'legacy');
+  h.t.plan.days[0].spots[0].must=true;
+  h.t.plan.days[4].spots=[];h.t.plan.days[5].spots=[];h.t.plan.days[6].spots=[];
+  h.t.plans=[JSON.parse(JSON.stringify(h.t.plan))];const first=JSON.stringify(h.t.plan.days[0]),saved=JSON.stringify(h.t.plans);
+  h.context.handleTravelAction({id:'travelFillDays',dataset:{}});
+  assert.ok(h.t.plan.days.every(d=>d.spots.length));assert.equal(JSON.stringify(h.t.plan.days[0]),first);assert.equal(JSON.stringify(h.t.plans),saved);assert.ok(h.t.dirty);
+});
+test('旅游足迹参与排除去过城市，删除记录后取消排除，旧城市标记独立保留',()=>{
+  const h=harness();h.t.visited=[city('杭州').id];h.context.state.visits=[{activity:'travel',storeId:city('厦门').id},{activity:'food',storeId:'restaurant'}];
+  assert.deepEqual(Array.from(h.context.travelVisitedIds()).sort(),[city('杭州').id,city('厦门').id].sort());
+  h.context.state.visits=[];assert.deepEqual(Array.from(h.context.travelVisitedIds()),[city('杭州').id]);
+});
+
+
+test('旅游记录保存、编辑、删除和清空仅作用于当前分类，刷新可恢复',()=>{
+  const listeners={},storage=new Map(),nodes=new Map();
+  const element=()=>({addEventListener(){},classList:{add(){},remove(){},toggle(){}},close(){},textContent:'',innerHTML:'',style:{}});
+  const document={querySelector:s=>{if(!nodes.has(s))nodes.set(s,element());return nodes.get(s);},addEventListener:(type,handler)=>{(listeners[type]||=[]).push(handler);},body:element()};
+  const context=vm.createContext({document,window:{},localStorage:{getItem:k=>storage.get(k),setItem:(k,v)=>storage.set(k,v)},Doux:require('./core.js'),DouxTravel:travelCore,crypto:require('node:crypto').webcrypto,Date,console,Set,Map,setTimeout:()=>0,clearTimeout(){},confirm:()=>true,FormData:class{constructor(form){this.values=form.values;}get(k){return this.values[k];}}});
+  vm.runInContext(fs.readFileSync('app.js','utf8')+';globalThis.s=state;',context);
+  context.render=()=>{};context.travelRecordStore=id=>({id,name:'桂林',activity:'travel',emoji:'🧳'});
+  for(const key of ['handleTravelAction','handleFreeWheelAction','handleHomeAction','handleDiscoveryAction','handleCompactAction'])context[key]=()=>false;
+  context.s.visits=[{id:'food',activity:'food',name:'餐厅'},{id:'play',activity:'play',name:'场馆'}];
+  const form={id:'visitForm',dataset:{store:'city-4',activity:'travel',visit:''},values:{date:'2026-01-01',feeling:'喜欢',price:'1200',note:'旅行回忆'}};
+  const submit=()=>listeners.submit.forEach(fn=>fn({target:form,preventDefault(){}}));
+  submit();assert.equal(context.s.visits.length,3);const saved=context.s.visits[2];assert.equal(saved.activity,'travel');assert.equal(saved.name,'桂林');assert.equal(saved.price,1200);
+  form.dataset.visit=saved.id;form.values.note='已编辑';submit();assert.equal(context.s.visits.length,3);assert.equal(context.s.visits[2].note,'已编辑');
+  assert.equal(JSON.parse(storage.get('doux-visits'))[2].activity,'travel');
+  const click=button=>listeners.click.forEach(fn=>fn({target:{closest:()=>button}}));
+  click({dataset:{deleteVisit:saved.id}});assert.deepEqual(Array.from(context.s.visits,v=>v.id),['food','play']);
+  form.dataset.visit='';submit();context.s.visitTab='travel';click({id:'clearVisits',dataset:{}});assert.deepEqual(Array.from(context.s.visits,v=>v.id),['food','play']);
+});

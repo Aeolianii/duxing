@@ -28,7 +28,8 @@
     ['天津',117.20,39.08,'城市漫游 美食 历史古迹','街区漫步、海河风景与本地小吃搭配着安排。','五大道|民园广场|古文化街|海河|意式风情区|天津博物馆'],
     ['福州',119.30,26.08,'历史古迹 城市漫游 美食','从老街巷出发，把园林和城市生活一起装进行程。','三坊七巷|林则徐纪念馆|西湖公园|福建博物院|上下杭|烟台山公园']
   ];
-  const cities=rows.map(([name,lng,lat,tags,intro,spots],i)=>({id:'city-'+i,name,location:[lng,lat],tags:tags.split(' '),intro,spots:spots.split('|').map((name,j)=>({id:`spot-${i}-${j}`,name,stay:/乐园|度假区|黄山风景区|鼓浪屿/.test(name)?'建议预留一整天':'建议预留 1～3 小时',fullDay:/乐园|度假区|黄山风景区|鼓浪屿/.test(name)}))}));
+  const extraSpots=['广州塔|白云山','中山公园|深圳当代艺术与城市规划馆','圆明新园|景山公园','岳麓山|湖南省植物园','独秀峰|伏波山','厦门园林植物园|集美学村','洛阳桥|清源山','灵隐寺|西溪国家湿地公园','虎丘|沧浪亭','中山陵|雨花台','静安寺|上海自然博物馆','文殊院|成都大熊猫繁育研究基地','磁器口古镇|重庆动物园','大唐芙蓉园|西安博物院','北海公园|雍和宫','小鱼山公园|青岛啤酒博物馆','云南民族村|大观公园','蝴蝶泉|双廊古镇','晴川阁|古德寺','隋唐大运河文化博物馆|关林','西递|呈坎','南山文化旅游区|三亚千古情景区','静园|水上公园','于山|鼓山'];
+  const cities=rows.map(([name,lng,lat,tags,intro,spots],i)=>({id:'city-'+i,name,location:[lng,lat],tags:tags.split(' '),intro,spots:(spots+'|'+extraSpots[i]).split('|').map((name,j)=>({id:`spot-${i}-${j}`,name,stay:/乐园|度假区|海洋王国|世界之窗|黄山风景区|鼓浪屿/.test(name)?'建议预留一整天':'建议预留 1～3 小时',fullDay:/乐园|度假区|海洋王国|世界之窗|黄山风景区|鼓浪屿/.test(name)}))}));
   const normalize=s=>String(s||'').trim().replace(/市$/,'');
   function matchesPOI(city,name,poi){
     if(!poi?.location||!String((poi.city||'')+' '+(poi.address||'')).includes(city.name)||distance(poi.location,city.location)>180)return false;
@@ -48,7 +49,7 @@
     const pool=city.spots.slice();
     if(c.themes.includes('主题乐园'))pool.sort((a,b)=>Number(b.fullDay)-Number(a.fullDay));
     let cursor=0;
-    const days=Array.from({length:c.days},(_,index)=>{const spots=[];const count=c.children||c.elders||c.days===1?1:2;while(cursor<pool.length&&spots.length<count){const next=pool[cursor];if(next.fullDay&&spots.length)break;spots.push({...next});cursor++;if(next.fullDay)break;}return {spots,light:false};});
+    const days=Array.from({length:c.days},(_,index)=>{const spots=[];const pace=c.children||c.elders||c.days===1?1:2;const count=Math.min(pace,Math.ceil((pool.length-cursor)/(c.days-index)));while(cursor<pool.length&&spots.length<count){const next=pool[cursor];if(next.fullDay&&spots.length)break;spots.push({...next});cursor++;if(next.fullDay)break;}return {spots,light:false};});
     return {id,cityId:city.id,cityName:city.name,conditions:JSON.parse(JSON.stringify(c)),days,checklist:{},savedAt:null};
   }
   function replacement(city,plan,day,index){const used=new Set(plan.days.flatMap(d=>d.spots.map(s=>s.id)));return city.spots.find(s=>!used.has(s.id)&&(!s.fullDay||plan.days[day].spots.length===1))||null;}

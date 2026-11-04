@@ -55,44 +55,83 @@ async function locateReal(){
   }catch(error){if(token===mapUI.token&&searchToken===mapUI.searchToken)$('#mapError').textContent=error.message+'；也可以搜索或拖动地图选点。';}
 }
 function realOrigins(){return state.page==='fair'?state.people.map(p=>({...p.origin,mode:p.mode,limit:p.limit})):[{...state.origin,mode:state.config.mode,limit:state.config.limit}];}
+// These distances only prioritize searches; eligibility always uses real routes.
+function meetingDistance(a,b){const r=Math.PI/180,dlat=(b[1]-a[1])*r,dlng=(b[0]-a[0])*r;return 12742*Math.asin(Math.min(1,Math.sqrt(Math.sin(dlat/2)**2+Math.cos(a[1]*r)*Math.cos(b[1]*r)*Math.sin(dlng/2)**2)));}
+function meetingReach(p){return Math.max(1,p.limit)*(p.mode==='驾车'?.7:p.mode==='公共交通'?.4:.09);}
+function meetingSearches(origins,config){
+  if(origins.length===1)return [{point:origins[0].location,config}];
+  const weights=origins.map(p=>1/meetingReach(p)**2),total=weights.reduce((a,b)=>a+b,0);
+  const weighted=[0,1].map(i=>origins.reduce((n,p,j)=>n+p.location[i]*weights[j],0)/total);
+  const center=[0,1].map(i=>origins.reduce((n,p)=>n+p.location[i],0)/origins.length);
+  const wide={...config,limit:Math.max(...origins.map(p=>p.limit)),mode:origins.some(p=>p.mode==='驾车')?'驾车':origins.some(p=>p.mode==='公共交通')?'公共交通':'步行'};
+  const sorted=origins.slice().sort((a,b)=>meetingReach(a)-meetingReach(b));
+  const jobs=[{point:weighted,config:wide},{point:sorted[0].location,config:{...config,mode:sorted[0].mode,limit:sorted[0].limit}},{point:center,config:wide},...sorted.slice(1).map(p=>({point:p.location,config:{...config,mode:p.mode,limit:p.limit}}))];
+  const unique=jobs.filter((job,index)=>!jobs.slice(0,index).some(prev=>meetingDistance(prev.point,job.point)<.15));
+  unique.push({point:weighted,config:{...wide,pageIndex:2}});return unique;
+}
 async function refreshCandidates(){
   if(state.page==='custom'){generate();render();return;}
   if(!state.live)return buildDemoWheel();
   const origins=realOrigins();
   if(origins.some(p=>!p.location)){state.searchMessage='请先选好'+(state.page==='fair'?'每个人的':'你的')+'出发点';render();return state.page==='fair'?openPeople():openLocation();}
-  const token=++state.request;state.loading=true;state.stage='loading';state.progress={value:8,title:(state.activity==='play')?'正在寻找附近场馆…':'正在寻找附近餐厅…',detail:(state.activity==='play')?'先按类型和范围搜索':'先按口味和范围搜索'};state.candidates=[];state.searchMessage='';render();
+  const token=++state.request;state.loading=true;state.stage='loading';state.progress={value:8,title:(state.activity==='play')?'正在寻找附近场馆…':'正在寻找附近餐厅…',detail:'先按类型和可达范围搜索'};state.candidates=[];state.searchMessage='';render();
   const config={...state.config,types:[...state.config.types],activity:state.activity},fair=state.page==='fair';
-  const start=Date.now(),limit=45000;
+  const deadline=Date.now()+(fair?Math.min(120000,45000+origins.length*15000):45000);
+  const active=()=>token===state.request&&Date.now()<deadline;
+  const matches=[],seen=new Set();let failures=0,completed=0,checked=0,searchFailures=0,searchError='',budgetRejected=0,hoursRejected=0,routeRejected=0;
   try{
-    const center=[0,1].map(i=>origins.reduce((sum,p)=>sum+p.location[i],0)/origins.length);
-    const searchConfig=fair?{...config,limit:Math.max(...origins.map(p=>p.limit)),mode:origins.some(p=>p.mode==='驾车')?'驾车':origins.some(p=>p.mode==='公共交通')?'公共交通':'步行'}:config;
-    let pool=await DouxMap.nearby(center,searchConfig);if(token!==state.request)return;
-    pool=Doux.shuffle(pool).filter(s=>!state.excluded.has(s.id)&&(state.repeat||!state.drawn.has(s.id)));
-    const matches=[];let cursor=0,failures=0,completed=0,checked=0;
-    updateProgress(20,'正在核对路线…',`共 ${pool.length} 家待检查`);
-    // Two workers bound quota usage; every selected restaurant must pass actual route checks.
-    async function worker(){while(cursor<pool.length&&token===state.request&&Date.now()-start<limit){
-      const store=pool[cursor++];
-      if(config.budget&&(store.price==null?!config.unknownPrice:store.price>config.budget)){checked++;continue;}
-      if(config.open&&!config.unknownHours){checked++;continue;}
-      try{
-        const times=[];
-        for(const origin of origins){if(token!==state.request||Date.now()-start>=limit)return;times.push(await DouxMap.route(origin.location,store.location,origin.mode,{city:origin.city,cityd:store.city}));}
-        completed++;
-        if(DouxMap.eligible(store,config,times,origins.map(p=>p.limit))){
-          const candidate={...store,times,max:Math.max(...times),gap:Math.max(...times)-Math.min(...times),sum:times.reduce((a,b)=>a+b,0),opening:null,routeMode:config.mode==='公共交通'?'公交/地铁（含步行）':config.mode,routeKey:routeContext(store).key,routeCheckedAt:Date.now(),routeStatus:'ready'};
-          matches.push(candidate);
-        }
-      }catch{failures++;}
-      checked++;if(token===state.request)updateProgress(20+Math.round(75*checked/Math.max(1,pool.length)),'正在核对路线…',`已检查 ${checked} / ${pool.length} 家，符合条件 ${matches.length} 家`);
-    }}
-    await Promise.all([worker(),worker()]);if(token!==state.request)return;
+    const jobs=meetingSearches(origins,config);
+    for(let jobIndex=0;jobIndex<jobs.length&&active()&&matches.length<config.count;jobIndex++){
+      const job=jobs[jobIndex];let pool;
+      updateProgress(Math.min(85,10+jobIndex*10),jobIndex?'正在补充集合区域…':config.activity==='play'?'正在寻找附近场馆…':'正在寻找附近餐厅…',`已找到 ${matches.length} 家，按${fair?'每个人':'你'}的路程继续查找`);
+      try{pool=await DouxMap.nearby(job.point,{...job.config,cancelled:()=>!active()});}catch(error){searchFailures++;searchError=error.message;continue;}
+      if(token!==state.request)return;
+      pool=Doux.shuffle(pool).filter(s=>!seen.has(s.id)&&!state.excluded.has(s.id)&&(state.repeat||!state.drawn.has(s.id)));
+      pool.forEach(s=>seen.add(s.id));
+      const score=store=>Math.max(...origins.map(p=>meetingDistance(p.location,store.location)/meetingReach(p)));
+      if(fair)pool.sort((a,b)=>score(a)-score(b));
+      let cursor=0;
+      async function worker(){while(cursor<pool.length&&active()&&matches.length<config.count){
+        const store=pool[cursor++];
+        if(config.budget&&(store.price==null?!config.unknownPrice:store.price>config.budget)){budgetRejected++;checked++;continue;}
+        if(config.open&&!config.unknownHours){hoursRejected++;checked++;continue;}
+        try{
+          const times=Array(origins.length).fill(null);
+          const order=origins.map((origin,index)=>({origin,index,score:meetingDistance(origin.location,store.location)/meetingReach(origin)})).sort((a,b)=>b.score-a.score);
+          for(const {origin,index} of order){
+            if(!active())break;
+            const minutes=await DouxMap.route(origin.location,store.location,origin.mode,{city:origin.city,cityd:store.city});
+            if(token!==state.request)return;
+            times[index]=minutes;
+            if(!Number.isFinite(minutes)){failures++;break;}
+            if(minutes>origin.limit){routeRejected++;break;}
+          }
+          completed++;
+          if(DouxMap.eligible(store,config,times,origins.map(p=>p.limit))){
+            matches.push({...store,times,max:Math.max(...times),gap:Math.max(...times)-Math.min(...times),sum:times.reduce((a,b)=>a+b,0),opening:null,routeMode:fair?'多人最长路程':config.mode,routeKey:routeContext(store).key,routeCheckedAt:Date.now(),routeStatus:'ready'});
+          }
+        }catch{failures++;}
+        checked++;if(token===state.request)updateProgress(Math.min(95,20+Math.round(70*checked/Math.max(1,seen.size))),'正在核对每个人的路线…',`已检查 ${checked} 家，符合条件 ${matches.length} 家`);
+      }}
+      await Promise.all([worker(),worker()]);
+      if(config.open&&!config.unknownHours)break;
+    }
+    if(token!==state.request)return;
     state.candidates=(fair?matches.sort(Doux.fairSort):Doux.shuffle(matches)).slice(0,config.count);
     state.candidates.forEach(s=>state.catalog[s.id]=s);
-    state.searchMessage=state.candidates.length?`找到 ${state.candidates.length} 家${failures?'，部分路线未获取':''}`:config.open&&!config.unknownHours?'营业时间未知，可在筛选中允许未知':failures&&!completed?'路线查询失败，请稍后重试':'本次检索暂无合适'+(state.activity==='play'?'场馆':'餐厅')+'，试试调整条件';
+    const timedOut=Date.now()>=deadline;
+    const notes=[timedOut?'部分路线尚未查完，可再次生成继续核对':'',failures||searchFailures?'部分地图查询失败':''].filter(Boolean).join('；');
+    state.searchMessage=state.candidates.length?`找到 ${state.candidates.length} 家${notes?'；'+notes:''}`:
+      hoursRejected?'营业时间未知，请在筛选中允许营业时间未知':
+      timedOut?'路线查询尚未完成，暂未确认共同可达的店；请重试，已查询的有效路线会复用':
+      failures||searchFailures?`部分地图查询失败，不能判定没有符合条件的店；请重试${searchError?'（'+searchError+'）':''}`:
+      budgetRejected&&!routeRejected?'检索到的店未通过人均预算或价格未知设置，请检查筛选条件':
+      completed?(fair?'本次检索的店暂未同时满足所有人的路程，请检查各成员的出行方式与时间':'本次候选暂未满足你的路程，请检查出行方式与时间'):
+      '本次范围暂无可用候选，可调整位置、类别或开启新一轮';
   }catch(error){if(token===state.request)state.searchMessage=error.message;}
   finally{if(token===state.request){state.loading=false;state.stage=state.candidates.length?'wheel':'map';if(state.candidates.length)updateProgress(100,'候选已就位','转盘已准备好');render();window.scrollTo({top:0});}}
 }
+
 const detailTasks=new Map(),detailCache=new Map();
 const routeTasks=new Map();
 function routeContext(store){
@@ -115,7 +154,7 @@ async function ensureStoreRoute(store,force=false){
       const times=[];
       for(const origin of origins){
         if(expired)throw new Error('route timeout');
-        const time=await DouxMap.route(origin.location,store.location,origin.mode,{city:origin.city,cityd:store.city});
+        const time=await DouxMap.route(origin.location,store.location,origin.mode,{city:origin.city,cityd:store.city,force});
         if(!Number.isFinite(time)||time<0)throw new Error('no route');
         times.push(time);
       }
