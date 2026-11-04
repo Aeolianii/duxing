@@ -327,9 +327,9 @@ function unifiedWheelHarness(){
   return {...h,items:()=>vm.runInContext('freeWheel.items',h.context)};
 }
 
-test('统一自定义转盘三种入口、文字地点收藏混合且去重，底栏移除自选',()=>{
+test('统一自定义转盘地图与收藏入口、文字地点收藏混合且去重，底栏移除自选',()=>{
   const h=unifiedWheelHarness();h.context.renderFreeWheel();
-  assert.match(h.elements['#view'].innerHTML,/输入文字/);assert.match(h.elements['#view'].innerHTML,/地图选地点/);assert.match(h.elements['#view'].innerHTML,/从收藏添加/);
+  assert.doesNotMatch(h.elements['#view'].innerHTML,/输入文字/);assert.match(h.elements['#view'].innerHTML,/地图选地点/);assert.match(h.elements['#view'].innerHTML,/从收藏添加/);
   assert.equal(vm.runInContext('navs.some(n=>n[0]==="custom")',h.context),false);
   assert.equal(h.context.insertFreeItem({name:'看电影'}),true);
   assert.equal(h.context.insertFreeItem(store),true);
