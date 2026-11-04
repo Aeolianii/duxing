@@ -94,6 +94,21 @@ const {createServer}=require('./server.cjs');
     assert.equal(await page.evaluate(()=>state.origin.name),'广州塔');
     console.log('PASS: Escape preserves profile draft, save completes, nested map restores query and selected place');
 
+    await page.evaluate(()=>{
+      state.mapConfigured=true;state.visitTab='food';
+      DouxMap.search=async()=>[{id:'amap-B-FAR',poiId:'B-FAR',name:'北京远方餐厅',source:'amap',activity:'food',category:'餐饮服务',typecode:'050100',location:[116.4,39.9],address:'北京市测试路1号'}];
+      navigate('visits');
+    });
+    await page.click('#newVisit');await page.fill('#recordSearch','北京 远方餐厅');await page.click('#recordSearchGo');
+    await page.locator('#recordPick option[value="amap-B-FAR"]').waitFor();
+    await page.selectOption('#recordPick','amap-B-FAR');await page.locator('#reviewForm').waitFor();
+    assert.equal(await page.getAttribute('#reviewForm','data-store'),'B-FAR');
+    await back();await page.locator('#recordSearch').waitFor();
+    assert.equal(await page.inputValue('#recordSearch'),'北京 远方餐厅');
+    assert.equal(await page.locator('#recordPick option[value="amap-B-FAR"]').count(),1);
+    await page.click('.modal-close');await check('!document.querySelector("#modal").open');
+    console.log('PASS: nationwide visit search and dropdown selection preserve POI identity and Back restores search');
+
     const samples=await page.evaluate(async()=>{
       const disc=document.createElement('div');disc.style.cssText='position:fixed;width:40px;height:40px;top:0;left:0';document.body.append(disc);
       const motion=DouxWheel.start(disc);await new Promise(r=>setTimeout(r,400));

@@ -42,7 +42,7 @@ async function readJson(req, limit) {
 function createServer({config = loadConfig(), fetcher = fetch, reviews, uploadsDir = path.join(DATA_DIR, 'uploads')} = {}) {
   const research=createResearch({config,fetcher}),optionResearch=createResearch({config,fetcher,allowOptions:true});
   const reviewStore = reviews || createReviewStore({file: path.join(DATA_DIR, 'reviews.json'), uploadDir: uploadsDir});
-  const files = new Set(['index.html', 'style.css', 'app.js', 'core.js', 'amap-client.js', 'map-ui.js', 'discovery.js', 'ai-client.js', 'wheel-motion.js', 'app-history.js', 'freewheel.js','travel-core.js','travel.js', 'assets/food.webp', 'assets/play.webp', 'assets/travel.webp', 'assets/custom.webp','review-model.js','reviews.js']);
+  const files = new Set(['index.html', 'style.css', 'app.js', 'core.js', 'amap-client.js', 'map-ui.js', 'discovery.js', 'ai-client.js', 'wheel-motion.js', 'app-history.js', 'freewheel.js','travel-core.js','travel.js', 'assets/food.webp', 'assets/play.webp', 'assets/travel.webp', 'assets/custom.webp','review-model.js','visit-picker.js','reviews.js']);
   const types = {'.html':'text/html; charset=utf-8', '.js':'application/javascript; charset=utf-8', '.css':'text/css; charset=utf-8', '.webp':'image/webp'};
   const uploadTypes = {'.jpg':'image/jpeg', '.png':'image/png', '.webp':'image/webp'};
   return http.createServer(async (req, res) => {
