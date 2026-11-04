@@ -62,16 +62,12 @@ async function spinFreeWheel(){
   freeWheel.last=winner;freeWheel.busy=true;state.busy=true;
   document.querySelectorAll('#view button').forEach(b=>b.disabled=true);
   $('#freeStatus').textContent='好运转动中，也在了解这个选项…';
-  const disc=$('#freeDisc'),reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const animation=reduced?null:disc.animate([{transform:'rotate(0deg)'},{transform:'rotate(360deg)'}],{duration:650,iterations:Infinity});
+  const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const motion=DouxWheel.start($('#freeDisc'),{period:700,reduced});
   const task=researchFreeOption(winner,round);
   let timer;
   await Promise.all([wait(reduced?0:1800),Promise.race([task,new Promise(resolve=>timer=setTimeout(resolve,10000))])]);clearTimeout(timer);
-  const matrix=new DOMMatrix(getComputedStyle(disc).transform),angle=Math.atan2(matrix.b,matrix.a)*180/Math.PI;
-  animation?.cancel();disc.style.transform=`rotate(${angle}deg)`;disc.getBoundingClientRect();
-  disc.style.transition=reduced?'none':'transform 950ms cubic-bezier(.16,.7,.15,1)';
-  disc.style.transform=`rotate(${360*3-(index+.5)*360/list.length}deg)`;
-  await wait(reduced?0:950);
+  if(!await motion.stop(index,list.length,()=>round===freeWheel.round))return;
   freeWheel.busy=false;state.busy=false;render();showFreeResult();
 }
 function handleFreeWheelAction(button){

@@ -49,14 +49,13 @@ async function spinTravel(){
   const index=Math.floor(Math.random()*list.length),city=list[index],round=++travel.round;
   travel.last=city;travel.drawn.add(city.id);state.busy=true;
   document.querySelectorAll('#view button,#view input,#backHome,#help').forEach(b=>b.disabled=true);
-  const disc=$('#travelDisc'),reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
   $('#travelSpinStatus').textContent='好运转动中，正在了解这座城…';
-  const animation=reduced?null:disc.animate([{transform:'rotate(0deg)'},{transform:'rotate(360deg)'}],{duration:700,iterations:Infinity});
+  const motion=DouxWheel.start($('#travelDisc'),{period:700,reduced});
   const task=researchTravel(city,round);loadTravelPhoto(city);let timer;
   await Promise.all([wait(reduced?0:1600),Promise.race([task,new Promise(resolve=>timer=setTimeout(resolve,8000))])]);clearTimeout(timer);
-  const matrix=new DOMMatrix(getComputedStyle(disc).transform),angle=(Math.atan2(matrix.b,matrix.a)*180/Math.PI+360)%360;
-  animation?.cancel();disc.style.transform=`rotate(${angle}deg)`;disc.getBoundingClientRect();disc.style.transition=reduced?'none':'transform 900ms cubic-bezier(.16,.7,.15,1)';disc.style.transform=`rotate(${1080-(index+.5)*360/list.length}deg)`;
-  await wait(reduced?0:900);state.busy=false;$('#backHome').disabled=false;$('#help').disabled=false;render();showTravelResult();
+  if(!await motion.stop(index,list.length,()=>round===travel.round))return;
+  state.busy=false;$('#backHome').disabled=false;$('#help').disabled=false;render();showTravelResult();
 }
 function markTravelDirty(){travel.dirty=true;travel.revision++;travel.draftSaved=persistTravel();const note=$('#travelSaveNote');if(note)note.textContent=travel.draftSaved?'草稿已在本机保留；点击保存行程加入我的旅行。':'草稿保存失败，请重试保存行程。';}
 function renderTravelPlan(){const p=travel.plan,city=travelCity(p.cityId),day=p.days[travel.day];

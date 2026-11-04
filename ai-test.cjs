@@ -87,7 +87,7 @@ function harness(load){
   const modal={open:false,addEventListener(){},close(){this.open=false}},status={},disc={style:{},animate(){return {cancel(){}}},getBoundingClientRect(){}};
   const elements={'#modal':modal,'#status':status,'#disc':disc,'#nav':{},'#bgStatus':{}};
   let deadline;
-  const context={console,localStorage:{getItem(){return null}},window:{},document:{hidden:false,querySelector:s=>elements[s]||null,querySelectorAll:()=>[],addEventListener(){}},
+  const context={DouxWheel:require("./wheel-motion.js"),console,localStorage:{getItem(){return null}},window:{},document:{hidden:false,querySelector:s=>elements[s]||null,querySelectorAll:()=>[],addEventListener(){}},
     setTimeout:(fn,ms)=>ms===11000?(deadline=fn,100000):setTimeout(fn,0),clearTimeout,
     DOMMatrix:class{constructor(){this.a=1;this.b=0}},getComputedStyle:()=>({transform:''}),matchMedia:()=>({matches:true}),prepareDetails:load};
   vm.createContext(context);vm.runInContext(fs.readFileSync(__dirname+'/app.js','utf8'),context);
@@ -106,7 +106,7 @@ test('中奖请求结束且结果展示后才串行搜索其他店；关闭后�
   h.modal.open=false;h.state.bg++;gates[1].resolve(true);await tick();assert.equal(calls.length,2);
 });
 
-test('12 秒降级展示仍保留中奖店优先权，任务结束前不查其他店',async()=>{
+test('前台超时降级展示仍保留中奖店优先权，任务结束前不查其他店',async()=>{
   const gate=deferred(),calls=[];const h=harness(s=>{calls.push(s.id);return s.id==='amap-A'?gate.promise:Promise.resolve(true);});
   const round=h.context.spin();h.deadline();await tick();assert.equal(h.modal.open,true);assert.deepEqual(calls,['amap-A']);
   gate.resolve(true);await round;await tick();assert.deepEqual(calls,['amap-A','amap-B','amap-C']);

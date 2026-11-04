@@ -77,21 +77,16 @@ async function spin(){
   state.bg++;state.last=winner;state.busy=true;state.drawn.add(winner.id);eventLog('winner-locked',winner.id);
   document.querySelectorAll('#view button,#view input,#view select').forEach(e=>e.disabled=true);
   $('#status').textContent=winner.manual?'正在揭晓你的选择…':'正在搜索中奖店铺资料…';
-  const disc=$('#disc'),rotation=disc.animate([{transform:'rotate(0deg)'},{transform:'rotate(360deg)'}],{duration:700,iterations:Infinity});
+  const motion=DouxWheel.start($('#disc'),{reduced:matchMedia('(prefers-reduced-motion: reduce)').matches});
   const task=(async()=>{
     if(winner.manual)return true;
     eventLog('foreground-start',winner.id);
     try {const ok=await prepareDetails(winner,1300);eventLog('foreground-done',winner.id);return ok!==false;}
     catch {winner.ai={status:'error',error:'资料检索失败，请重试'};eventLog('foreground-done',winner.id);return false;}
   })();
-  // Reserve the final 950ms for deceleration, keeping the total near 12 seconds.
+  // Bound the foreground wait; braking stays independent of network speed.
   let timer;await Promise.race([task,new Promise(resolve=>timer=setTimeout(resolve,11000))]);clearTimeout(timer);
-  const matrix=new DOMMatrix(getComputedStyle(disc).transform),angle=Math.atan2(matrix.b,matrix.a)*180/Math.PI;
-  rotation.cancel();disc.style.transform=`rotate(${angle}deg)`;disc.getBoundingClientRect();
-  disc.style.transition=matchMedia('(prefers-reduced-motion: reduce)').matches?'none':'transform 950ms cubic-bezier(.16,.7,.15,1)';
-  disc.style.transform=`rotate(${360*3-(index+.5)*(360/a.length)}deg)`;
-  await wait(matchMedia('(prefers-reduced-motion: reduce)').matches?0:950);
-  if(rid!==state.round)return;
+  if(!await motion.stop(index,a.length,()=>rid===state.round))return;
   state.busy=false;render();detail(winner,true);eventLog('result-visible',winner.id);
   const token=state.bg;
   // Both conditions are required: visible result AND a settled foreground task.
