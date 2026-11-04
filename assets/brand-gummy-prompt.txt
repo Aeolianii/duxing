@@ -1,0 +1,12 @@
+Tool: built-in image_gen
+Transparent background: true
+Reference: original pink 都 brand mark supplied by the user.
+
+Use case: style-transfer / logo-brand.
+Asset type: finished app / website brand icon for the Chinese project 都行.
+Input image 1 is the existing logo, a reference and edit target. Redesign it according to the following approved brief while retaining a single white Chinese 都 in a slightly tilted pink rounded-square silhouette.
+Create ONE isolated, production-ready logo on a genuinely transparent background, square high resolution canvas, no presentation sheet.
+Subject: a plump berry-pink gummy candy, rounded squircle, front facing with a tiny amount of thickness, tilted counterclockwise about 9 degrees. Smooth softly rounded corners, elegant subtle berry gradient, restrained soft satin gummy highlights at upper left, thin deeper-pink lower edge and short soft translucent shadow. It should feel like a polished playful brand mark, never a photoreal wet candy, no sugar granules, no wrapper, no extra objects.
+The ONLY text is exactly "都" (Chinese U+90FD). It is white custom artistic lettering, hand-designed as part of this logo, NOT an ordinary Song/Ming/Hei/system font. Draw chunky softly rounded, lively bespoke candy-shaped strokes, subtly asymmetric terminals, tasteful expressive proportions; keep the correct recognizable structure of 都, the left 者 component and right 阝 component, including clearly open counters and the 日 in the lower left. It must not turn into another character. Center the glyph optically on the candy face; glyph and candy tilt together. Letter occupies about 68% of candy face leaving generous breathing room. White strokes look gently pressed into the pink candy with a very subtle bevel, maintaining clean sharp contrast and clear negative spaces at 42px.
+Composition: one large centered icon using roughly 86% of square canvas width, minimal padding for the tilt and short shadow, no clipped edges.
+Avoid conventional typeset typography, additional Chinese text, captions, watermark, border frame, decorative stars, dice dots, food/cutlery symbols, excessive extrusion, long shadow, heavy gloss, busy textures, white opaque backdrop or checkerboard baked into pixels.
