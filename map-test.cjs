@@ -486,3 +486,19 @@ test('头像本地裁切保存且修改用户名不会覆盖头像，坏图片�
   assert.equal(await h.changeAvatar({type:'image/png',size:11*1024*1024}),false);
   assert.equal(profile.avatar,'data:image/png;base64,Zm9v');
 });
+
+
+test('个人信息弹窗先预览头像，点击保存才一起写入头像和用户名',async()=>{
+  const h=harness({});let saved=0,profile={username:'旧名字',avatar:''};
+  const fields={'#modal':{open:true,close(){this.open=false;}},'#saveUsername':{disabled:false},'#profileAvatarPreview':{},'#currentUsername':{value:'新名字'}};
+  h.$=selector=>fields[selector];h.state.people=[{}];h.state.username='旧名字';h.state.avatar='';h.state.profileDraft={avatar:'',loading:false};
+  h.avatarIcon=avatar=>avatar;h.URL={createObjectURL:()=> 'blob:test',revokeObjectURL(){}};
+  h.Image=class{constructor(){this.naturalWidth=this.naturalHeight=100;}set src(_value){this.onload();}};
+  h.document.createElement=()=>({getContext:()=>({drawImage(){}}),toDataURL:()=> 'data:image/png;base64,Zm9v'});
+  h.read=()=>profile;h.save=(_key,value)=>{saved++;profile=value;return true;};
+  assert.equal(await h.changeAvatar({type:'image/png',size:100},true),true);
+  assert.equal(saved,0);assert.equal(h.state.avatar,'');assert.equal(fields['#profileAvatarPreview'].innerHTML,'data:image/png;base64,Zm9v');
+  h.handleDiscoveryAction({id:'saveUsername',dataset:{}});
+  assert.equal(saved,1);assert.equal(profile.username,'新名字');assert.equal(profile.avatar,'data:image/png;base64,Zm9v');
+  assert.equal(h.state.username,'新名字');assert.equal(h.state.avatar,profile.avatar);
+});
