@@ -200,3 +200,6 @@ main:has(.map-stage) .icon-burst{font-size:37px;width:37px;height:37px;flex-basi
 .home-shortcut svg{display:block;width:100%;height:100%;pointer-events:none}
 .home-shortcut:hover{background:#fffffff0;transform:translateY(-2px)}.home-shortcut:active{transform:scale(.94)}
 @media(prefers-reduced-motion:reduce){.home-shortcut{transition:none}.home-shortcut:hover,.home-shortcut:active{transform:none}}
+
+/* Unified custom wheel: three entry methods and linked place rows. */
+.free-add-methods{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px}.free-add-methods .btn{flex:1 1 100px;font-size:12px;padding:10px 8px;white-space:nowrap}.free-list small,.free-favorite small{display:block;color:var(--muted);font-size:11px;line-height:1.6;margin-top:4px}.free-list .free-place-name{font-size:14px;color:var(--ink);text-align:left;min-height:30px;padding:0}.free-favorite{text-align:left;width:100%;flex-wrap:nowrap}.free-favorite>span:nth-child(2){flex:1;min-width:0}.free-favorite:disabled{opacity:.6}

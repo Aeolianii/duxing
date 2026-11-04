@@ -460,3 +460,12 @@ test('地图预览使用评分抽样，保留完整池供生成复用',async()=>
   assert.deepEqual(Array.from(vm.runInContext('discovery.previews.map(s=>s.id)',h)),['7','6','5','4','3']);
   assert.equal(vm.runInContext('discovery.cache.stores.length',h),8);
 });
+
+
+test('统一转盘的地图选择保留真实地点身份，不改动出发点',()=>{
+  const h=harness({}),origin=JSON.stringify(h.state.origin);let added;
+  h.addFreeItem=item=>added=item;
+  vm.runInContext("mapUI.target='freewheel';mapUI.draft={id:'tower',poiId:'T',source:'amap',name:'广州塔',location:[113.3,23.1],category:'风景名胜;国家级景点'}",h);
+  h.handleCompactAction({id:'confirmLocation',dataset:{}});
+  assert.equal(added.poiId,'T');assert.equal(added.activity,'play');assert.equal(JSON.stringify(h.state.origin),origin);
+});

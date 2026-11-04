@@ -223,3 +223,39 @@ test('抽奖结果保留理由及操作，收藏重绘仍保持结果场景',()=
   for(const pattern of [/为什么选它/,/id="again"/,/id="record"/,/不太想/])assert.match(h.html(),pattern);
   assert.equal(calls,0);h.context.favorite(s.id);assert.equal(h.state.detailWon,true);assert.match(h.html(),/id="again"/);
 });
+
+
+function unifiedWheelHarness(){
+  const h=previewHarness();
+  h.context.crypto={randomUUID:()=>Math.random().toString()};
+  h.context.document.body={classList:{add(){},toggle(){}}};
+  h.elements['#view']={innerHTML:''};h.elements['#freeOptionName']={focus(){}};
+  vm.runInContext(fs.readFileSync(__dirname+'/freewheel.js','utf8'),h.context);
+  h.context.render=()=>h.context.renderFreeWheel();
+  return {...h,items:()=>vm.runInContext('freeWheel.items',h.context)};
+}
+
+test('统一自定义转盘三种入口、文字地点收藏混合且去重，底栏移除自选',()=>{
+  const h=unifiedWheelHarness();h.context.renderFreeWheel();
+  assert.match(h.elements['#view'].innerHTML,/输入文字/);assert.match(h.elements['#view'].innerHTML,/地图选地点/);assert.match(h.elements['#view'].innerHTML,/从收藏添加/);
+  assert.equal(vm.runInContext('navs.some(n=>n[0]==="custom")',h.context),false);
+  assert.equal(h.context.insertFreeItem({name:'看电影'}),true);
+  assert.equal(h.context.insertFreeItem(store),true);
+  assert.equal(h.context.insertFreeItem({...store,id:'duplicate'}),false);
+  h.state.favorites=[{...store,id:'B',poiId:'B',name:'公园',activity:'play'}];
+  h.context.handleFreeWheelAction({dataset:{freeFavorite:'0'}});
+  assert.equal(h.items().length,3);assert.equal(h.items()[1].poiId,'A');assert.equal(h.items()[2].activity,'play');
+  h.context.handleFreeWheelAction({dataset:{freeFavorite:'0'}});assert.equal(h.items().length,3);
+  h.context.handleFreeWheelAction({dataset:{freeRemove:h.items()[0].id}});assert.equal(h.items().length,2);
+  h.context.handleFreeWheelAction({id:'freeReady',dataset:{}});assert.match(h.elements['#view'].innerHTML,/freeSpin/);
+  h.context.handleFreeWheelAction({id:'freeEdit',dataset:{}});assert.match(h.elements['#view'].innerHTML,/从收藏添加/);
+});
+
+test('真实地点检索保留分店信息，超时后资料仍可更新结果卡片',async()=>{
+  const h=unifiedWheelHarness();h.state.page='freewheel';h.state.last=store;h.elements['#modal'].open=true;
+  vm.runInContext('freeWheel.round=1',h.context);let prepared=0,updated=0;
+  h.context.prepareDetails=async winner=>{prepared++;assert.equal(winner.poiId,'A');winner.ai={status:'ready',introduction:'分店介绍'};};
+  h.context.updateAI=()=>updated++;h.context.updateStats=()=>{};
+  await h.context.researchFreeOption(store,1);assert.equal(prepared,1);assert.equal(updated,1);
+  h.state.page='near';await h.context.researchFreeOption(store,1);assert.equal(updated,1);
+});

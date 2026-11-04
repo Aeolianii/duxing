@@ -10,7 +10,7 @@ function localMinuteOfDay(){return Math.floor((Date.now()+LOCAL_OFFSET_MINUTES*6
 function disposeMap(){mapUI.token++;mapUI.searchToken++;mapUI.map?.destroy();mapUI.map=null;mapUI.marker=null;}
 function openFilters(){showModal(modalTop((state.activity==='play')?'🎡 这一次，想怎么玩？':'🍋 这一顿，想怎么吃？')+settings());}
 function openCandidates(){const play=state.activity==='play';showModal(modalTop(play?'🎡 本轮的游玩候选':'🍽️ 本轮的美味候选')+`<div class="candidate-list">${available().map(s=>`<div class="candidate-row"><button data-detail="${s.id}" class="candidate-main"><span class="candidate-emoji">${s.emoji||'🍽️'}</span><span><strong>${esc(s.name)}</strong><small>${(()=>{const p=typeof priceMeta==='function'?priceMeta(s):{text:s.price==null?'人均未知':'¥'+s.price,note:s.price==null,label:'参考人均'};return esc(p.note?p.text:(p.label==='门票'?p.text+' 门票':p.text+'/人'))})()}${Number.isFinite(s.max)?' · '+s.max+' 分钟':''}</small></span></button><button data-exclude="${s.id}" class="close" aria-label="移除${esc(s.name)}">×</button></div>`).join('')||`<div class="empty"><b>还没有可抽的${play?'场馆':'餐厅'}</b>试试调整条件，或开启新一轮。</div>`}</div><p class="muted sheet-note">每家概率相同，点店名查看详情。</p>`);}
-function openCustom(){showModal(modalTop((state.activity==='play')?'🎡 我的心愿场馆':'🍱 我的心愿餐厅')+customPanel()+(state.mapConfigured?`<button class="btn full" id="searchCustom">${state.activity==='play'?'在高德查找场馆':'在高德查找餐厅'}</button>`:''));}
+function openCustom(){navigate('freewheel');}
 function openPeople(){
   const play=state.activity==='play';
   if(!state.live){showModal(modalTop(play?'👫 和谁一起去？':'👫 饭搭子从哪出发？')+fairPanel());return;}
@@ -23,9 +23,10 @@ async function openLocation(target='near'){
   if(!state.live){
     showModal(modalTop('📍 从这里出发')+`<div class="notice">演示地点，可先体验选点。真实地图需要配置高德。</div><div class="chips sheet-note">${places.map((p,i)=>`<button class="chip" data-demo-place="${i}">${p.name}</button>`).join('')}</div>${mapHTML()}<button class="btn full sheet-note" data-close>就从这里出发</button><button class="btn secondary full sheet-note" id="mapSetup">配置高德地图</button>`);bindMap();return;
   }
+  const picking=target==='custom'||target==='freewheel';
   const previous=typeof target==='number'?state.people[target].origin:state.origin;
-  showModal(modalTop(target==='custom'?((state.activity==='play')?'搜索真实场馆':'搜索真实餐厅'):'📍 选一个出发点')+`<div class="search-line"><input id="mapSearch" aria-label="搜索城市、地点或餐厅" placeholder="输入城市、地点或餐厅"><button id="mapSearchGo" class="btn small">搜索</button></div><div id="mapResults" class="map-results"></div><div class="real-map-wrap"><div id="realMap" aria-label="高德地图，可拖拽或点击选点"></div><div id="mapLoading" class="map-loading">正在打开地图…</div></div><div class="map-selection"><strong id="selectedPlace">${esc(previous?.location?previous.name:'默认浏览广州，请搜索或移动地图选点')}</strong><button id="realLocate" class="btn secondary small">⌖ 定位</button></div><p id="mapError" class="muted" role="status">点击地图或拖动地图后，确认出发点。</p><button id="confirmLocation" class="btn full sheet-note" ${previous?.location&&target!=='custom'?'':'disabled'}>${target==='custom'?'将选中的餐厅加入转盘':'就从这里出发'}</button>`);
-  mapUI.target=target;mapUI.draft=previous?.location&&target!=='custom'?{...previous}:null;mapUI.results=[];
+  showModal(modalTop(target==='freewheel'?'📍 地图选地点':target==='custom'?((state.activity==='play')?'搜索真实场馆':'搜索真实餐厅'):'📍 选一个出发点')+`<div class="search-line"><input id="mapSearch" aria-label="搜索城市、地点或餐厅" placeholder="输入城市、地点或餐厅"><button id="mapSearchGo" class="btn small">搜索</button></div><div id="mapResults" class="map-results"></div><div class="real-map-wrap"><div id="realMap" aria-label="高德地图，可拖拽或点击选点"></div><div id="mapLoading" class="map-loading">正在打开地图…</div></div><div class="map-selection"><strong id="selectedPlace">${esc(previous?.location?previous.name:'默认浏览广州，请搜索或移动地图选点')}</strong><button id="realLocate" class="btn secondary small">⌖ 定位</button></div><p id="mapError" class="muted" role="status">${picking?'搜索餐厅或场馆，点击搜索结果选择具体地点。':'点击地图或拖动地图后，确认出发点。'}</p><button id="confirmLocation" class="btn full sheet-note" ${previous?.location&&!picking?'':'disabled'}>${picking?'将选中的地点加入转盘':'就从这里出发'}</button>`);
+  mapUI.target=target;mapUI.draft=previous?.location&&!picking?{...previous}:null;mapUI.results=[];
   const token=mapUI.token;
   try{
     const A=await DouxMap.load();if(token!==mapUI.token||!$('#realMap'))return;
@@ -33,7 +34,7 @@ async function openLocation(target='near'){
     mapUI.map=new A.Map('realMap',{zoom:15,center,viewMode:'2D'});
     mapUI.marker=new A.Marker({position:center});mapUI.map.add(mapUI.marker);
     const select=(point,name)=>{
-      if(target==='custom')return;
+      if(picking)return;
       mapUI.searchToken++;mapUI.draft={location:DouxMap.coordinates(point),name:name||'地图选定位置'};
       mapUI.marker.setPosition(point);$('#selectedPlace').textContent=mapUI.draft.name;$('#confirmLocation').disabled=false;
     };
@@ -46,7 +47,7 @@ async function searchMap(){
   const query=$('#mapSearch')?.value.trim();if(!query)return toast('先输入一个地点名称');
   const token=mapUI.token,searchToken=++mapUI.searchToken;
   $('#mapResults').textContent='正在查找…';
-  try{const results=await DouxMap.search(query,mapUI.target==='custom'?state.origin?.location:null);if(token!==mapUI.token||searchToken!==mapUI.searchToken)return;
+  try{const results=await DouxMap.search(query,['custom','freewheel'].includes(mapUI.target)?state.origin?.location:null);if(token!==mapUI.token||searchToken!==mapUI.searchToken)return;
     const playSearch=state.activity==='play';mapUI.results=mapUI.target==='custom'?(playSearch?results.filter(s=>DouxMap.matchesPlay(s,DouxMap.playTypes)).map((s,i)=>DouxMap.decoratePlay(s,i)):results.filter(s=>s.category.startsWith('餐饮'))):results;
     $('#mapResults').innerHTML=mapUI.results.map((p,i)=>`<button data-map-result="${i}"><strong>${esc(p.name)}</strong><small>${esc(p.address)}</small></button>`).join('')||'<p class="muted">没找到匹配地点，试试加上城市名。</p>';
   }catch(error){if(token===mapUI.token&&searchToken===mapUI.searchToken)$('#mapResults').textContent=error.message;}
@@ -55,7 +56,7 @@ async function locateReal(){
   const token=mapUI.token,searchToken=++mapUI.searchToken;$('#mapError').textContent='正在请求定位…';
   try{const p=await DouxMap.locate();if(token!==mapUI.token||searchToken!==mapUI.searchToken)return;
     mapUI.map?.setCenter(p.location);mapUI.marker?.setPosition(p.location);
-    if(mapUI.target!=='custom'){mapUI.draft=p;$('#selectedPlace').textContent=p.name;$('#confirmLocation').disabled=false;}
+    if(!['custom','freewheel'].includes(mapUI.target)){mapUI.draft=p;$('#selectedPlace').textContent=p.name;$('#confirmLocation').disabled=false;}
     $('#mapError').textContent='定位完成，也可以手动调整位置。';
   }catch(error){if(token===mapUI.token&&searchToken===mapUI.searchToken)$('#mapError').textContent=error.message+'；也可以搜索或拖动地图选点。';}
 }
@@ -276,7 +277,10 @@ function handleCompactAction(button){
     case 'realLocate':locateReal();break;
     case 'confirmLocation':{
       if(!mapUI.draft)return true;const selected={...mapUI.draft},target=mapUI.target;$('#modal').close();
-      if(target==='custom'){state.catalog[selected.id]=selected;addCustom(selected);}
+      if(target==='custom'||target==='freewheel'){
+        if(!selected.category?.startsWith('餐饮')&&DouxMap.matchesPlay(selected,DouxMap.playTypes))Object.assign(selected,DouxMap.decoratePlay(selected,0));
+        state.catalog[selected.id]=selected;addFreeItem(selected);
+      }
       else{if(typeof target==='number')state.people[target].origin=selected;else state.origin=selected;generate();render();if(typeof target==='number')openPeople();}
       break;
     }
@@ -284,7 +288,7 @@ function handleCompactAction(button){
       discovery.previews=[];discovery.cache=null;state.live=!state.live;state.origin=state.live?{name:'选择真实出发点',location:null}:{...places[0]};
       state.drawn.clear();state.excluded.clear();$('#modal').close();generate();render();updateSource();break;
     case 'openRules':showModal(modalTop('✨ 把纠结交给好运')+'<p class="detail-copy">每个候选被抽中的概率相同。点击开始就确定结果，转动期间优先获取中奖店资料，展示后再补充其他候选。<br><br>开启“本轮不重复”后，已抽中的店不会再次出现。新一轮会清除已抽与本轮排除记录。</p>');break;
-    case 'help':showModal(modalTop('你好，这里是都行 ✿')+'<p class="detail-copy">地图选点 → 生成转盘 → 开始抽取。<br>详细设置都藏在卡片按钮里，点击就能展开。<br><br>地图上的“定位方式”可以切换单人、多人；“自选”放入纠结的店。收藏与到店记录保存在当前浏览器，清除站点数据会删除它们。</p>');break;
+    case 'help':showModal(modalTop('你好，这里是都行 ✿')+'<p class="detail-copy">地图选点 → 生成转盘 → 开始抽取。<br>详细设置都藏在卡片按钮里，点击就能展开。<br><br>地图上的“定位方式”可以切换单人、多人；首页“自定义”可输入文字、地图选地点或从收藏添加。收藏与到店记录保存在当前浏览器，清除站点数据会删除它们。</p>');break;
     default:return false;
   }
   return true;
