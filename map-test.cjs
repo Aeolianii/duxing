@@ -469,3 +469,20 @@ test('统一转盘的地图选择保留真实地点身份，不改动出发点',
   h.handleCompactAction({id:'confirmLocation',dataset:{}});
   assert.equal(added.poiId,'T');assert.equal(added.activity,'play');assert.equal(JSON.stringify(h.state.origin),origin);
 });
+
+
+test('头像本地裁切保存且修改用户名不会覆盖头像，坏图片不改变资料',async()=>{
+  const h=harness({});let profile={username:'原用户名'},revoked=0,draw;
+  h.state.username='原用户名';h.read=()=>profile;h.save=(_key,value)=>{profile=value;return true;};
+  h.URL={createObjectURL:()=> 'blob:test',revokeObjectURL(){revoked++;}};
+  h.Image=class{constructor(){this.naturalWidth=600;this.naturalHeight=400;}set src(_value){this.onload();}};
+  h.document.createElement=()=>({getContext:()=>({drawImage(...args){draw=args;}}),toDataURL:()=> 'data:image/png;base64,Zm9v'});
+  assert.equal(await h.changeAvatar({type:'image/png',size:1000}),true);
+  assert.equal(profile.username,'原用户名');assert.equal(profile.avatar,h.state.avatar);assert.equal(revoked,1);
+  assert.deepEqual(draw.slice(1),[100,0,400,400,0,0,256,256]);
+  h.state.people=[{}];h.$=()=>({value:'新用户名',close(){}});h.handleDiscoveryAction({id:'saveUsername',dataset:{}});
+  assert.equal(profile.username,'新用户名');assert.equal(profile.avatar,'data:image/png;base64,Zm9v');
+  assert.equal(await h.changeAvatar({type:'text/html',size:100}),false);
+  assert.equal(await h.changeAvatar({type:'image/png',size:11*1024*1024}),false);
+  assert.equal(profile.avatar,'data:image/png;base64,Zm9v');
+});

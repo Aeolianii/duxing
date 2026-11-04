@@ -3,6 +3,7 @@ state.stage='map';state.locationMode='single';state.activeOrigin=0;
 const discovery={map:null,markers:[],token:0,previewToken:0,camera:null,previews:[],cache:null};
 const personColors=['#e56935','#4285dc','#e6b52d','#8f67d8','#30a486','#ec7294'];
 state.username=read('profile')?.username||'用户1';
+state.avatar=read('profile')?.avatar||'';
 state.people.forEach((p,i)=>{p.username=i===0?state.username:'用户'+(i+1);p.color=personColors[i];});
 function personIdentity(i){const p=state.people[i];return {username:p?.username||'用户'+(i+1),color:p?.color||personColors[i%personColors.length]};}
 function usernameField(i){const p=personIdentity(i);return `<label class="person-username"><span>用户名</span><input aria-label="成员${i+1}用户名" data-person="${i}" data-key="username" maxlength="20" value="${esc(p.username)}"></label>`;}
@@ -37,6 +38,24 @@ function originChips(){
 }
 function originPin(username){
   return `<svg class="origin-pin-art" viewBox="0 0 64 84" role="img" aria-label="${esc(username)}的出发点"><path d="M32 1C14.9 1 1 14.9 1 32c0 21 31 52 31 52s31-31 31-52C63 14.9 49.1 1 32 1Z" fill="currentColor"/><circle cx="32" cy="31" r="13" fill="white"/></svg>`;
+}
+async function changeAvatar(file){
+  if(!file)return false;
+  if(!['image/png','image/jpeg','image/webp','image/gif'].includes(file.type)){toast('请选择 PNG、JPG、WebP 或 GIF 图片');return false;}
+  if(file.size>10*1024*1024){toast('请选择 10MB 以内的图片');return false;}
+  const url=URL.createObjectURL(file);
+  try{
+    const img=new Image();
+    await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=reject;img.src=url;});
+    if(!img.naturalWidth||!img.naturalHeight)throw new Error('invalid image');
+    const canvas=document.createElement('canvas');canvas.width=canvas.height=256;
+    const ctx=canvas.getContext('2d'),side=Math.min(img.naturalWidth,img.naturalHeight);
+    ctx.drawImage(img,(img.naturalWidth-side)/2,(img.naturalHeight-side)/2,side,side,0,0,256,256);
+    const avatar=canvas.toDataURL('image/png');
+    if(!save('profile',{...read('profile'),username:state.username,avatar}))return false;
+    state.avatar=avatar;render();toast('头像已更新');return true;
+  }catch{toast('图片无法读取，请换一张图片');return false;}
+  finally{URL.revokeObjectURL(url);}
 }
 function editUsername(){showModal(modalTop('怎么称呼你？')+`<label class="username-form">用户名<input id="currentUsername" maxlength="20" value="${esc(state.username)}"></label><button id="saveUsername" class="btn full sheet-note">保存用户名</button>`);}
 function demoHomeMap(){return `<div id="demoHomeMap" aria-label="演示地图，点击选择出发点"><svg viewBox="0 0 360 380" preserveAspectRatio="none" aria-hidden="true"><rect width="360" height="380" fill="#e5f4e6"/><path d="M310 -10 Q160 100 300 235 T320 400" stroke="#acdfe8" stroke-width="45" fill="none"/><g stroke="#fffdf8" stroke-width="14" fill="none"><path d="M-10 90 L390 140 M100 -10 L150 400 M-10 300 L390 245 M-10 200 L390 180"/></g><g fill="#cee8c7"><rect x="15" y="15" width="65" height="55" rx="15"/><rect x="175" y="30" width="55" height="60" rx="16"/><rect x="25" y="225" width="63" height="45" rx="14"/><rect x="190" y="300" width="60" height="65" rx="15"/></g><text x="16" y="355" fill="#689383" font-size="12">榕树街区 · 演示</text></svg><div id="demoPins"></div></div>`;}
@@ -139,8 +158,9 @@ function handleDiscoveryAction(button){
   if(d.homePerson!==undefined){state.activeOrigin=+d.homePerson;$('#originStrip').innerHTML=originChips();if(state.live)paintHomePins(false);else paintDemoPins();return true;}
   if(d.preview!==undefined){const s=discovery.previews[+d.preview];if(s)detail(s);return true;}
   switch(button.id){
+    case 'editAvatar':$('#avatarFile')?.click();break;
     case 'editUsername':editUsername();break;
-    case 'saveUsername':{const name=$('#currentUsername').value.trim().slice(0,20);if(!name){toast('请填写用户名');break;}if(!save('profile',{username:name}))break;state.username=name;state.people[0].username=name;$('#modal').close();render();break;}
+    case 'saveUsername':{const name=$('#currentUsername').value.trim().slice(0,20);if(!name){toast('请填写用户名');break;}if(!save('profile',{...read('profile'),username:name}))break;state.username=name;state.people[0].username=name;$('#modal').close();render();break;}
     case 'locationMode':openLocationMode();break;
     case 'homeOrigin':case 'homeSearch':openLocation(state.page==='fair'?state.activeOrigin:'near');break;
     case 'homeLocate':{
