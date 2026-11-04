@@ -1,4 +1,14 @@
 (function(root){
+ // Public HTTP origins expose getRandomValues but may lack randomUUID.
+ if (root.crypto?.getRandomValues && typeof root.crypto.randomUUID !== 'function') {
+   root.crypto.randomUUID = function () {
+     const bytes = root.crypto.getRandomValues(new Uint8Array(16));
+     bytes[6] = (bytes[6] & 0x0f) | 0x40;
+     bytes[8] = (bytes[8] & 0x3f) | 0x80;
+     const hex = Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('');
+     return [hex.slice(0,8), hex.slice(8,12), hex.slice(12,16), hex.slice(16,20), hex.slice(20)].join('-');
+   };
+ }
  const data=[['巷口小馆','中餐',48,42,43,'家常小炒，热气腾腾的一餐','🥘'],['面包与番茄','西餐',86,55,45,'番茄意面与刚出炉的面包','🍝'],['首尔饭桌','韩餐',72,48,57,'石锅拌饭配几碟清爽小菜','🍲'],['一碗好面','中餐',28,60,55,'现煮汤面，简单也满足','🍜'],['小岛食堂','日料',98,37,55,'定食与乌冬，慢慢吃顿饭','🍱'],['青柠厨房','东南亚',89,56,36,'椰香咖喱与酸甜青柠风味','🍛'],['炭火小聚','烧烤',108,65,35,'炭火烤串，很适合一起分享','🍢'],['热锅见','火锅',118,33,35,'热腾腾的锅底与鲜切配菜','🥘'],['南风小炒','中餐',58,30,63,'一盘现炒，一碗米饭','🍚'],['松间洋食','西餐',138,70,62,'烤蔬菜与慢煎牛排','🥩'],['米粒韩食','韩餐',null,45,29,'一人食也很丰盛的韩式饭桌','🍙'],['晚风面馆','中餐',32,57,68,'夜里也能吃到一碗热汤面','🍜'],['桃桃茶铺','奶茶',18,44,46,'桃香果茶与清爽鲜奶茶','🧋'],['云朵奶茶','奶茶',22,56,48,'绵密奶盖与茉莉茶香','🧋'],['青柚茶事','奶茶',16,48,55,'青柚果茶，酸甜清爽','🧋'],['半糖小站','奶茶',15,54,56,'珍珠奶茶，可选糖度与冰量','🧋']];
  const stores=data.map((d,i)=>({id:'demo-'+i,name:d[0],type:d[1],price:d[2],x:d[3],y:d[4],intro:d[5],emoji:d[6],address:'演示街区 · '+['榕树路','花园街','沿河路'][i%3]+(12+i*7)+'号',rating:(4.3+i%5*.1).toFixed(1),hours:i===10?null:i===11?[[0,1440]]:[[660,840],[1020,1320]],color:['#f8d6b3','#dce8c8','#f3c4c3','#f5e2a1','#c6dce8','#d9cee9'][i%6]}));
  const duration=(s,p)=>Math.ceil(Math.hypot(s.x-p.x,s.y-p.y)*(p.mode==='驾车'?.25:p.mode==='公共交通'?.3:.55)+(p.mode==='公共交通'?8:3));
