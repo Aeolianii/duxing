@@ -252,13 +252,15 @@ test('预览响应在切换地点或关闭卡片后不再修改可见卡片',asy
   }
 });
 
-test('抽奖结果保留理由及操作，收藏重绘仍保持结果场景',()=>{
+test('抽奖结果保留加入行程与理由，不提前要求记录到访，收藏重绘仍保持结果场景',()=>{
   const h=previewHarness();let calls=0;
+  h.context.window.DouxReviews={planButton:()=>'<button data-rv-plan>加入行程</button>',mount(){}};
   h.context.prepareMerchantDetails=()=>{calls++;};
   const s={...store,ai:{status:'ready',introduction:'简介',reviewSummary:'摘要',retrievedAt:new Date().toISOString(),evidence:[]}};
   h.state.catalog={[s.id]:s};
   h.context.detail(s,true);
-  for(const pattern of [/为什么选它/,/id="again"/,/id="record"/,/不太想/])assert.match(h.html(),pattern);
+  for(const pattern of [/为什么选它/,/id="again"/,/data-rv-plan/,/加入行程/,/不太想/])assert.match(h.html(),pattern);
+  assert.doesNotMatch(h.html(),/id="record"/);
   assert.equal(calls,0);h.context.favorite(s.id);assert.equal(h.state.detailWon,true);assert.match(h.html(),/id="again"/);
 });
 

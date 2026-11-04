@@ -33,3 +33,31 @@ test('本机保存中途失败会恢复原评价和足迹',()=>{
   assert.throws(()=>Model.commit(storage,[{rating:5}],[{id:'v'}]),/quota/);
   assert.equal(data.get('doux-my-reviews-v1'),'old-review');assert.equal(data.get('doux-visits'),'old-visit');
 });
+
+
+test('加入行程只产生待出发记录，同一地点不重复加入',()=>{
+  const store={id:'amap-B001',poiId:'B001',name:'测试店',rating:4.8};
+  const first=Model.plan([],store,{id:'p1',createdAt:'2026-11-04'});
+  const same=Model.plan(first,{...store,id:'B001'},{id:'p2',createdAt:'2026-11-04'});
+  assert.equal(same.length,1);assert.equal(same[0].status,'planned');assert.equal(same[0].visitId,undefined);
+  assert.equal(Model.get([],store),null);
+});
+test('确认到访只完成对应行程，完成后允许再次计划同一地点',()=>{
+  const first=Model.plan([],{id:'B001',name:'第一家'},{id:'p1'});
+  const both=Model.plan(first,{id:'B002',name:'第二家'},{id:'p2'});
+  const done=Model.finishPlan(both,'p1','v1');
+  assert.equal(done[0].status,'visited');assert.equal(done[0].visitId,'v1');assert.equal(done[1].status,'planned');
+  assert.equal(first[0].status,'planned');
+  assert.equal(Model.plan(done,{id:'B001'},{id:'p3'}).length,3);
+});
+test('移除待出发行程保留原记录，不改变已到访行程',()=>{
+  const plans=[{id:'p1',status:'planned'},{id:'p2',status:'visited',visitId:'v2'}];
+  const next=Model.cancelPlan(plans,'p1');assert.equal(next.length,2);assert.equal(next[0].status,'cancelled');
+  assert.deepEqual(Model.cancelPlan(next,'p2'),next);
+});
+test('完成行程落盘失败时，评分、足迹与行程一起恢复',()=>{
+  const data=new Map([['doux-my-reviews-v1','old-review'],['doux-visits','old-visit'],['doux-outings-v1','old-plan']]);let failed=false;
+  const storage={getItem:key=>data.get(key)??null,removeItem:key=>data.delete(key),setItem(key,value){if(key==='doux-outings-v1'&&!failed){failed=true;throw Error('quota');}data.set(key,value);}};
+  assert.throws(()=>Model.commit(storage,[{rating:5}],[{id:'v'}],[{status:'visited'}]),/quota/);
+  assert.equal(data.get('doux-my-reviews-v1'),'old-review');assert.equal(data.get('doux-visits'),'old-visit');assert.equal(data.get('doux-outings-v1'),'old-plan');
+});

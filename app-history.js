@@ -30,7 +30,7 @@
   function capture(){
     const r=route(),view=$('#view');
     const modal=dialog.open?{
-      key:(dialog.querySelector('.modal-top h3,.result-topbar h3')?.textContent||'')+':'+(dialog.querySelector('[data-store]')?.dataset.store||'')+':'+(dialog.querySelector('#reviewForm')?.dataset.record||'')+':'+(dialog.querySelector('#reviewForm')?.dataset.visit||''),
+      key:(dialog.querySelector('.modal-top h3,.result-topbar h3')?.textContent||'')+':'+(dialog.querySelector('[data-store]')?.dataset.store||'')+':'+(dialog.querySelector('#reviewForm')?.dataset.record||'')+':'+(dialog.querySelector('#reviewForm')?.dataset.visit||'')+':'+(dialog.querySelector('#reviewForm')?.dataset.plan||''),
       html:$('#modal-content .modal-inner')?.innerHTML||$('#modal-content').innerHTML,
       fields:fields(dialog),scroll:$('#modal-content').scrollTop,last:state.last,won:state.detailWon,reviews:window.DouxReviews?.snapshot(),
       map:dialog.querySelector('#realMap')?{target:mapUI.target,draft:mapUI.draft,results:mapUI.results.slice(),html:$('#mapResults').innerHTML}:null,

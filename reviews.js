@@ -18,6 +18,22 @@
   const cache = new Map();
   const Model = root.DouxReviewModel;
   const checkedStores = new Map();
+  const savedPlans=root.read('outings-v1');appState().outings=Array.isArray(savedPlans)?savedPlans:[];
+  const pendingFor=store=>(appState().outings||[]).find(item=>item.status==='planned'&&item.reviewKey===Model.keyOf(store));
+  function planButton(store){return `<button class="btn full" data-rv-plan>${pendingFor(store)?'查看行程':'＋ 加入行程'}</button>`;}
+  function renderPlans(tab){
+    if(tab==='travel')return '';
+    const plans=(appState().outings||[]).filter(item=>item.status==='planned'&&item.activity===tab);
+    return `<h2 class="profile-section-title">待出发</h2><div class="section-list">${plans.map(item=>`<article class="list-row"><span class="emoji">${item.store.emoji||(tab==='play'?'🎡':'🍽️')}</span><div class="grow"><h3>${esc(item.name)}</h3><p>${esc(item.store.address||'已加入行程')}</p><small>待出发</small></div><div class="actions"><button class="btn secondary small" data-rv-visit-plan="${esc(item.id)}">确认到访并评价</button><button class="quiet" data-rv-view-plan="${esc(item.id)}">查看地点</button><button class="quiet" data-rv-cancel-plan="${esc(item.id)}">移除</button></div></article>`).join('')||'<p class="empty">还没有待出发的行程</p>'}</div>`;
+  }
+  function addPlan(store){
+    if(pendingFor(store)){document.getElementById('modal')?.close();appState().visitTab=store.activity==='play'?'play':'food';root.navigate('visits');return;}
+    const next=Model.plan(appState().outings,store,{id:crypto.randomUUID(),createdAt:new Date().toISOString()});
+    if(!root.save('outings-v1',next))return;
+    appState().outings=next;
+    const action=document.getElementById('resultTripAction');if(action)action.innerHTML=planButton(store);
+    root.toast?.('已加入行程，出发后可在个人资料中确认到访');
+  }
   function personalRecords() { try { const value=JSON.parse(localStorage.getItem('doux-my-reviews-v1')||'[]');return Array.isArray(value)?value:[]; } catch { return []; } }
   const personal = store => Model.get(personalRecords(),store);
   function rememberPublic(store,mine) {
@@ -35,7 +51,7 @@
   }
   function personalHTML(store) {
     const mine=personal(store),status=mine?.publicId?(mine.publicPending?'修改未发布':'已发布'):'仅自己可见';
-    return `<div class="rv-personal"><div>${labelFor(store)}<small>${status}</small></div><button class="quiet" data-rv-write>${mine?'编辑记录与评价':'记录与评价'}</button></div>`;
+    return mine?.rating?`<div class="rv-personal"><div>${labelFor(store)}<small>${status}</small></div></div>`:'';
   }
   async function hydrateVisits(visits) {
     for(const visit of visits.filter(v=>v.activity!=='travel')) {
@@ -130,7 +146,7 @@
     if (!data) { body.innerHTML = '<p class="muted">正在读取评价…</p>'; return; }
     const writeButton = '';
     if (!data.total && !current.tag) {
-      body.innerHTML = `<div class="rv-empty"><b>还没有人评价过这里</b><p>你的第一条真实体验，会帮到下一个转到这里的人。</p>${writeButton}</div>`;
+      body.innerHTML = `<div class="rv-empty"><b>还没有人评价过这里</b>${writeButton}</div>`;
       return;
     }
     const list = data.reviews.length
@@ -183,7 +199,7 @@
   /* ---------- 写评价 ---------- */
   function draftBody(store) {
     const tags=TAGS[meta(store).activity],visit=draft.visit,kind=store.activity==='play'?'游玩':'到店';
-    return `<form id="reviewForm" class="rv-form" data-store="${esc(storeKey(store))}" data-visit="${esc(visit?.id||'')}" data-record="${draft.recordVisit?'visit':'review'}" novalidate>
+    return `<form id="reviewForm" class="rv-form" data-store="${esc(storeKey(store))}" data-visit="${esc(visit?.id||'')}" data-record="${draft.recordVisit?'visit':'review'}" data-plan="${esc(draft.planId||'')}" novalidate>
       <div class="intro-box">${esc(store.name)}</div>
       <p class="rv-form-label">我的评分</p>
       <div class="rv-rate" role="radiogroup" aria-label="评分">${[1,2,3,4,5].map(n=>`<button type="button" class="rv-star ${n<=draft.rating?'on':''}" data-rv-star="${n}" role="radio" aria-checked="${n===draft.rating}" aria-label="${n} 星">★</button>`).join('')}<b id="rvRateText">${RATE_TEXT[draft.rating]||'待评分'}</b></div>
@@ -191,7 +207,6 @@
       <p class="rv-form-label">我的评价</p><textarea id="rvContent" maxlength="${CONTENT_MAX}" rows="4" placeholder="写下这次体验…" aria-label="评价内容">${esc(draft.content||'')}</textarea>
       <p class="muted rv-counter"><span id="rvCount">${[...(draft.content||'')].length}</span> / ${CONTENT_MAX}</p>
       <div class="rv-photo-actions"><label class="btn outline small rv-upload">＋ 添加图片<input id="rvPhotos" type="file" accept="image/jpeg,image/png,image/webp" multiple hidden></label><small>最多 3 张</small></div><div id="rvPreview" class="rv-preview"></div>
-      <label class="rv-name">昵称<input id="rvName" maxlength="20" value="${esc(draft.authorName||appState()?.username||'用户1')}" aria-label="昵称"></label>
       <label class="rv-checkbox"><input id="rvVisited" type="checkbox" ${visit?'checked':''}>我已实际${kind}，同时保存足迹</label>
       <div id="rvVisitFields" ${visit||draft.recordVisit?'':'hidden'}>
         <label class="rv-name">实际到访日期<input id="rvVisitDate" type="date" max="${root.today()}" value="${esc(visit?.date||root.today())}"></label>
@@ -200,14 +215,14 @@
         ${visit?.feeling&&visit.feeling!=='暂不评价'?`<p class="muted">原感受：${esc(visit.feeling)}</p>`:''}
       </div>
       <label class="rv-checkbox"><input id="rvPublish" type="checkbox">同时发布到站内${personal(store)?.publicId?'（更新已发布评价）':''}</label>
-      <p class="muted rv-privacy">勾选后公开昵称、评分、评价和图片；日期、花费和私密备注不公开。</p>
+      <p class="muted rv-privacy">勾选后公开个人资料名称、评分、评价和图片；日期、花费和私密备注不公开。</p>
       <button class="btn full" id="rvSubmit" type="submit">保存记录与评价</button><p id="rvError" role="alert"></p>
     </form>`;
   }
   function openForm(store,options={}) {
     const mine=personal(store);
     draft={store,rating:mine?.rating||0,tags:[...(mine?.tags||[])],photos:[...(mine?.images||[])],content:mine?.content||'',authorName:mine?.authorName,
-      visit:options.visit||null,recordVisit:Boolean(options.recordVisit||options.visit),visitId:options.visit?.id||crypto.randomUUID(),fromResult:Boolean(document.getElementById('modal')?.open&&document.getElementById('storeReviews')),busy:false};
+      visit:options.visit||null,planId:options.planId||null,recordVisit:Boolean(options.recordVisit||options.visit),visitId:options.visit?.id||crypto.randomUUID(),fromResult:Boolean(document.getElementById('modal')?.open&&document.getElementById('storeReviews')),busy:false};
     root.showModal(root.modalTop('记录与评价')+draftBody(store));
     syncPreview();
   }
@@ -266,22 +281,22 @@
     const form=document.getElementById('reviewForm');if(!form)return;
     const value=id=>document.getElementById(id)?.value||'';
     const publish=document.getElementById('rvPublish').checked,visited=document.getElementById('rvVisited').checked;
-    const content=value('rvContent').trim(),name=value('rvName').trim(),date=value('rvVisitDate'),price=value('rvVisitPrice');
+    const content=value('rvContent').trim(),name=(appState()?.username||'用户1').trim()||'用户1',date=value('rvVisitDate'),price=value('rvVisitPrice');
     const error=document.getElementById('rvError'),say=message=>{if(error)error.textContent=message;};
     if(draft.recordVisit&&!visited)return say('请确认已经实际到访');
     if(visited&&(!date||date>root.today()))return say('请选择有效的到访日期');
     if(visited&&price!==''&&(!Number.isFinite(Number(price))||Number(price)<0))return say('请填写有效的人均花费');
     if(publish&&!draft.rating)return say('发布前请选择星级');
     if(publish&&[...content].length<5)return say('公开评价至少写 5 个字');
-    if(!name)return say('请填写昵称');
     if(!draft.rating&&!content&&!visited)return say('请评分、填写评价或记录一次到访');
     const active=draft,store=active.store,key=storeKey(store),records=personalRecords(),old=Model.get(records,store);
     const values={rating:active.rating,content,tags:active.tags.slice(),images:active.photos.slice(),authorName:name,updatedAt:new Date().toISOString()};
     const changed=!old||['rating','content','tags','images','authorName'].some(field=>JSON.stringify(old[field])!==JSON.stringify(values[field]));
     values.publicPending=Boolean(old?.publicPending||changed);
     const next=Model.put(records,store,values);
-    const visits=visited?Model.visit(appState().visits,store,{id:active.visitId,date,price:price===''?null:Number(price),note:value('rvPrivateNote')},active.visit):null;
-    try { Model.commit(localStorage,next,visits);if(visits){appState().visits=visits;active.visit=visits.find(v=>v.id===active.visitId);} }
+    const visits=visited?Model.visit(appState().visits,store,{id:active.visitId,date,price:price===''?null:Number(price),note:value('rvPrivateNote'),planId:active.planId},active.visit):null;
+    const plans=visited&&active.planId?Model.finishPlan(appState().outings,active.planId,active.visitId):null;
+    try { Model.commit(localStorage,next,visits,plans);if(plans)appState().outings=plans;if(visits){appState().visits=visits;active.visit=visits.find(v=>v.id===active.visitId);} }
     catch {return say('本机保存失败，请检查浏览器存储空间');}
     active.busy=true;const button=document.getElementById('rvSubmit');button.disabled=true;button.textContent=publish?'正在发布…':'正在保存…';say('');
     try {
@@ -314,6 +329,10 @@
     const button = event.target.closest('button');
     if (!button) return;
     const data = button.dataset;
+    if(data.rvPlan!==undefined){if(current)addPlan(current.store);return;}
+    if(data.rvVisitPlan){const item=(appState().outings||[]).find(item=>item.id===data.rvVisitPlan&&item.status==='planned');if(item)openForm(item.store,{recordVisit:true,planId:item.id});return;}
+    if(data.rvViewPlan){const item=(appState().outings||[]).find(item=>item.id===data.rvViewPlan);if(item)root.detail(item.store,false);return;}
+    if(data.rvCancelPlan){const next=Model.cancelPlan(appState().outings,data.rvCancelPlan);if(root.save('outings-v1',next)){appState().outings=next;root.render();}return;}
     if (data.rvWrite !== undefined) { if (current) openForm(current.store); return; }
     if (data.rvSort) { if (current) { current.sort = data.rvSort; current.page = 1; load(1); } return; }
     if (data.rvTag !== undefined) { if (current) { current.tag = data.rvTag; current.page = 1; load(1); } return; }
@@ -394,10 +413,11 @@
       }
     }
   }
-  root.DouxReviews = {mount, openForm, snapshot, restore, labelFor, hydrateVisits, TAGS, PHOTO_LIMIT};
+  root.DouxReviews = {mount, openForm, snapshot, restore, labelFor, hydrateVisits, planButton, renderPlans, TAGS, PHOTO_LIMIT};
   root.addEventListener('storage',event=>{
     if(event.key==='doux-visits'){try{const visits=JSON.parse(event.newValue||'[]');if(Array.isArray(visits))appState().visits=visits;}catch{}}
-    if(!['doux-my-reviews-v1','doux-visits'].includes(event.key))return;
+    if(event.key==='doux-outings-v1'){try{const plans=JSON.parse(event.newValue||'[]');if(Array.isArray(plans))appState().outings=plans;}catch{}}
+    if(!['doux-my-reviews-v1','doux-visits','doux-outings-v1'].includes(event.key))return;
     if(current?.el?.isConnected)render();
     if(appState()?.page==='visits'&&!document.getElementById('modal')?.open)root.render();
   });
