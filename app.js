@@ -172,8 +172,10 @@ function homeIllustration(kind){
 function renderHome(){
   const entries=[['food','吃什么','让这一餐有点惊喜'],['play','去哪玩','发现身边的小快乐'],['travel','想旅游','下一站，奔向远方'],['custom','自定义','你的选项，交给好运']];
   $('#view').innerHTML=`<section class="home-hub"><header class="hub-header"><span class="hub-flower" aria-hidden="true">✳</span><h1>都行</h1><p>把纠结，交给一点好运。</p></header><div class="hub-intro"><h2>今天，想来点什么？</h2><span aria-hidden="true">✦</span></div><div class="hub-grid">${entries.map(([id,title,description])=>`<button class="hub-card hub-${id}" data-feature="${id}" aria-label="${title}"><span class="hub-art">${homeIllustration(id)}</span><strong>${title}</strong><span class="hub-description">${description}</span></button>`).join('')}</div><p class="hub-footer"><span aria-hidden="true">☀</span> 选一个都行，快乐就出发。</p></section>`;
+  $('#view').insertAdjacentHTML('beforeend',`<div class="home-shortcuts" role="group" aria-label="我的收藏与足迹"><button class="home-shortcut home-shortcut-favorites" data-home-page="favorites" aria-label="收藏" title="收藏"><svg viewBox="0 0 32 32" aria-hidden="true" focusable="false"><path d="M16 27S4 19.4 4 11.7C4 7.7 6.8 5 10.4 5c2.4 0 4.3 1.3 5.6 3.3C17.3 6.3 19.2 5 21.6 5 25.2 5 28 7.7 28 11.7 28 19.4 16 27 16 27Z" fill="currentColor" fill-opacity=".18" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg></button><button class="home-shortcut home-shortcut-visits" data-home-page="visits" aria-label="足迹" title="足迹"><svg viewBox="0 0 32 32" aria-hidden="true" focusable="false"><g fill="currentColor" transform="rotate(-18 10 12)"><ellipse cx="10" cy="10" rx="4.5" ry="6.5"/><ellipse cx="10" cy="20" rx="3.1" ry="3.7"/></g><g fill="currentColor" transform="rotate(18 23 19)"><ellipse cx="23" cy="16" rx="4.5" ry="6.5"/><ellipse cx="23" cy="26" rx="3.1" ry="3.7"/></g></svg></button></div>`);
 }
 function handleHomeAction(button){
+  if(['favorites','visits'].includes(button.dataset.homePage)){navigate(button.dataset.homePage);return true;}
   if(button.id==='backHome'){navigate('home');return true;}
   if(!button.dataset.feature)return false;
   if(button.dataset.feature==='food')navigate('near');
