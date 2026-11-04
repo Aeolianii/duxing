@@ -216,7 +216,7 @@ test('安全代理固定高德上游，覆盖伪造凭证并隐藏安全密钥',
 function harness(map){
   const element={addEventListener(){},innerHTML:'',textContent:'',open:false,style:{},parentElement:{setAttribute(){}},close(){},showModal(){}};
   const context={state:{page:'near',origin:{name:'测试起点',location:[113,23]},config:{mode:'步行',limit:15,budget:0,types:[],count:6,activity:'food'},people:[],excluded:new Set(),drawn:new Set(),repeat:false,request:0,custom:[],catalog:{}},
-    DouxMap:{...adapter,...map},Doux:core,document:{addEventListener(){},querySelector(){return element;}},$:()=>element,generate(){},render(){},toast(){},openCustom(){},fetch:async()=>({ok:false}),AbortSignal,console,setTimeout,clearTimeout,window:{scrollTo(){}}};
+    read:()=>[],DouxMap:{...adapter,...map},Doux:core,document:{addEventListener(){},querySelector(){return element;}},$:()=>element,generate(){},render(){},toast(){},openCustom(){},fetch:async()=>({ok:false}),AbortSignal,console,setTimeout,clearTimeout,window:{scrollTo(){}}};
   vm.createContext(context);vm.runInContext(fs.readFileSync(__dirname+'/discovery.js','utf8'),context);vm.runInContext(fs.readFileSync(__dirname+'/map-ui.js','utf8'),context);context.state.live=true;
   return context;
 }

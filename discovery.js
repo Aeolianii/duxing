@@ -2,8 +2,8 @@
 state.stage='map';state.locationMode='single';state.activeOrigin=0;
 const discovery={map:null,markers:[],token:0,previewToken:0,camera:null,previews:[],cache:null};
 const personColors=['#e56935','#4285dc','#e6b52d','#8f67d8','#30a486','#ec7294'];
-state.username='用户1';
-state.people.forEach((p,i)=>{p.username='用户'+(i+1);p.color=personColors[i];});
+state.username=read('profile')?.username||'用户1';
+state.people.forEach((p,i)=>{p.username=i===0?state.username:'用户'+(i+1);p.color=personColors[i];});
 function personIdentity(i){const p=state.people[i];return {username:p?.username||'用户'+(i+1),color:p?.color||personColors[i%personColors.length]};}
 function usernameField(i){const p=personIdentity(i);return `<label class="person-username"><span>用户名</span><input aria-label="成员${i+1}用户名" data-person="${i}" data-key="username" maxlength="20" value="${esc(p.username)}"></label>`;}
 const modeIcon=mode=>mode==='公共交通'?'🚇':mode==='驾车'?'🚗':'🚶';
@@ -140,7 +140,7 @@ function handleDiscoveryAction(button){
   if(d.preview!==undefined){const s=discovery.previews[+d.preview];if(s)detail(s);return true;}
   switch(button.id){
     case 'editUsername':editUsername();break;
-    case 'saveUsername':{const name=$('#currentUsername').value.trim().slice(0,20);if(!name){toast('请填写用户名');break;}state.username=name;state.people[0].username=name;$('#modal').close();render();break;}
+    case 'saveUsername':{const name=$('#currentUsername').value.trim().slice(0,20);if(!name){toast('请填写用户名');break;}if(!save('profile',{username:name}))break;state.username=name;state.people[0].username=name;$('#modal').close();render();break;}
     case 'locationMode':openLocationMode();break;
     case 'homeOrigin':case 'homeSearch':openLocation(state.page==='fair'?state.activeOrigin:'near');break;
     case 'homeLocate':{
