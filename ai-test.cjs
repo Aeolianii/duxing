@@ -178,3 +178,48 @@ test('通用转盘仅发送中奖名称，检索摘要后生成带来源的简�
     await post({name:'广州塔'});assert.equal(calls.length,2);
   }finally{await new Promise(r=>server.close(r));}
 });
+
+
+function previewHarness(){
+  const elements={'#nav':{},'#modal':{open:false,querySelector(){return null},addEventListener(){},showModal(){this.open=true;},close(){this.open=false;}},'#modal-content':{innerHTML:''}};
+  const context={console,Doux:require('./core.js'),localStorage:{getItem(){return null},setItem(){}},window:{},document:{hidden:false,addEventListener(){},querySelector(selector){return elements[selector]||null;}},setTimeout,clearTimeout};
+  vm.createContext(context);vm.runInContext(fs.readFileSync(__dirname+'/app.js','utf8'),context);
+  context.render=()=>{};context.toast=()=>{};
+  return {context,elements,state:context.window.demo.state,html:()=>elements['#modal-content'].innerHTML};
+}
+
+test('美食与游玩预览去掉抽奖控件，自动生成资料并在原卡片更新',async()=>{
+  for(const activity of ['food','play']){
+    const h=previewHarness(),gate=deferred();let calls=0,updates=0;
+    h.context.prepareMerchantDetails=async s=>{calls++;s.ai={status:'loading'};await gate.promise;s.ai={status:'ready',introduction:'可核对的地点介绍'};};
+    h.context.updateAI=s=>{updates++;assert.equal(s.ai.introduction,'可核对的地点介绍');};
+    h.context.updateStats=()=>{};
+    h.context.detail({...store,activity});
+    assert.equal(calls,1);assert.match(h.html(),/正在整理这个地点的介绍与资料来源/);
+    assert.match(h.html(),/fold" open/);assert.match(h.html(),/id="aiDetails"/);
+    assert.doesNotMatch(h.html(),/为什么选它|不太想|id="again"|id="record"|id="reject"|data-adjust/);
+    assert.match(h.html(),/id="route"/);assert.match(h.html(),/data-fav/);
+    gate.resolve();await tick();assert.equal(updates,1);
+  }
+});
+
+test('预览响应在切换地点或关闭卡片后不再修改可见卡片',async()=>{
+  for(const close of [false,true]){
+    const h=previewHarness(),gate=deferred();let updates=0;
+    h.context.prepareMerchantDetails=async s=>{s.ai={status:'loading'};await gate.promise;};
+    h.context.updateAI=()=>updates++;h.context.updateStats=()=>{};
+    h.context.detail({...store});
+    if(close)h.elements['#modal'].open=false;else h.context.detail({...store,id:'other',poiId:'other'});
+    gate.resolve();await tick();assert.equal(updates,close?0:1);
+  }
+});
+
+test('抽奖结果保留理由及操作，收藏重绘仍保持结果场景',()=>{
+  const h=previewHarness();let calls=0;
+  h.context.prepareMerchantDetails=()=>{calls++;};
+  const s={...store,ai:{status:'ready',introduction:'简介',reviewSummary:'摘要',retrievedAt:new Date().toISOString(),evidence:[]}};
+  h.state.catalog={[s.id]:s};
+  h.context.detail(s,true);
+  for(const pattern of [/为什么选它/,/id="again"/,/id="record"/,/不太想/])assert.match(h.html(),pattern);
+  assert.equal(calls,0);h.context.favorite(s.id);assert.equal(h.state.detailWon,true);assert.match(h.html(),/id="again"/);
+});
