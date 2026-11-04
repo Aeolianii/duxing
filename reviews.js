@@ -1,6 +1,6 @@
 'use strict';
 // 站内用户评价：结果页的大众点评式评价区 + 写评价弹层。
-// 只展示真实提交到本机服务的内容；没有任何内置或伪造的评价。
+// 真实评价来自本机服务；美食中奖页另有明确标注、独立于真实统计的界面示例。
 (function (root) {
   const TAGS = {
     food: ['味道好', '分量足', '性价比高', '环境舒服', '服务好', '干净卫生', '适合聚餐', '适合约会', '排队久', '有点贵', '太吵', '口味一般'],
@@ -97,14 +97,14 @@
     return `<span class="rv-avatar ${extra}" style="background:hsl(${hue(author?.name || '?')} 76% 91%);color:hsl(${hue(author?.name || '?')} 52% 38%)" aria-hidden="true">${esc(initial(author?.name))}</span>`;
   }
 
-  function shell(store) {
+  function shell(store,showExample=false) {
     const demo = store.source !== 'amap';
     return `<div class="rv-my-review">${personalHTML(store)}</div><div class="rv-panel-head"><h3>🗣 用户评价</h3></div>
-      <p class="rv-note">${demo ? '演示／自选门店：评价保存在这台服务器，仅代表本站用户，不是平台的真实评价。' : '来自本站用户的真实体验，写之前请先确认你去过这里。'}</p>
+      <p class="rv-note">${showExample?'含一条用于界面展示的示例评价。':demo ? '演示／自选门店：评价保存在这台服务器，仅代表本站用户，不是平台的真实评价。' : '来自本站用户的真实体验，写之前请先确认你去过这里。'}</p>
       <div class="rv-body" aria-live="polite"><p class="muted">正在读取评价…</p></div>`;
   }
 
-  function summaryHTML(data) {
+  function summaryHTML(data,example=false) {
     const s = data.summary;
     if (!s.count) return '';
     const bars = [5, 4, 3, 2, 1].map(star => {
@@ -113,7 +113,7 @@
     }).join('');
     return `<div class="rv-summary">
       <div class="rv-score"><strong>${s.average.toFixed(1)}</strong>${scoreStars(s.average)}
-        <small>站内平均分 · ${s.count} 条评价${s.photos ? ` · ${s.photos} 张图片` : ''}</small></div>
+        <small>${example?'示例评分':'站内平均分'} · ${s.count} 条${example?'示例':''}评价${s.photos ? ` · ${s.photos} 张${example?'示例':''}图片` : ''}</small></div>
       <div class="rv-hist">${bars}</div>
     </div>`;
   }
@@ -127,14 +127,20 @@
   function itemHTML(review) {
     return `<article class="rv-item">
       <div class="rv-item-head">${avatarHTML(review.author)}
-        <div class="grow"><strong>${esc(review.author.name)}${review.mine ? ' <small class="rv-mine">我的评价</small>' : ''}</strong>
-          <span class="rv-item-score"><span class="rv-stars-inline" aria-label="${review.rating} 星">${stars(review.rating)}</span><small>${dateText(review.createdAt)}</small>${Number.isFinite(review.actualPrice)?`<small>实际人均 ¥${esc(review.actualPrice)}</small>`:''}</span></div>
+        <div class="grow"><strong>${esc(review.author.name)}${review.example?' <span class="rv-example-tag">示例评价</span>':review.mine ? ' <small class="rv-mine">我的评价</small>' : ''}</strong>
+          <span class="rv-item-score"><span class="rv-stars-inline" aria-label="${review.rating} 星">${stars(review.rating)}</span><small>${review.example?'展示内容':dateText(review.createdAt)}</small>${Number.isFinite(review.actualPrice)?`<small>${review.example?'示例人均':'实际人均'} ¥${esc(review.actualPrice)}</small>`:''}</span></div>
       </div>
       <p class="rv-text">${esc(review.content)}</p>
       ${review.images.length ? `<div class="rv-photos">${review.images.map((src, i) => `<a href="${esc(src)}" target="_blank" rel="noopener noreferrer"><img src="${esc(src)}" alt="${esc(review.author.name)}的评价图片 ${i + 1}" loading="lazy"></a>`).join('')}</div>` : ''}
       ${review.tags.length ? `<div class="rv-item-tags">${review.tags.map(tag => `<span class="rv-tag-pill">${esc(tag)}</span>`).join('')}</div>` : ''}
-      <div class="rv-foot"><button class="rv-like ${review.liked ? 'on' : ''}" data-rv-like="${esc(review.id)}" aria-pressed="${review.liked ? 'true' : 'false'}">${review.liked ? '♥' : '♡'} 有用${review.likes ? ' · ' + review.likes : ''}</button></div>
+      <div class="rv-foot">${review.example?'<span class="rv-like">♡ 有用</span>':`<button class="rv-like ${review.liked ? 'on' : ''}" data-rv-like="${esc(review.id)}" aria-pressed="${review.liked ? 'true' : 'false'}">${review.liked ? '♥' : '♡'} 有用${review.likes ? ' · ' + review.likes : ''}</button>`}</div>
     </article>`;
+  }
+
+  function exampleHTML(full=false) {
+    const review={id:'food-example',example:true,author:{name:'小都'},rating:5,actualPrice:58,content:'口味合心意，份量也合适，环境舒服。和朋友一起过来，整体体验挺满意的。',images:['assets/food.webp'],tags:['味道好','环境舒服']};
+    const summary={count:1,average:5,histogram:{1:0,2:0,3:0,4:0,5:1},photos:1,tags:[]};
+    return `<section class="rv-example" aria-label="用户评价界面示例"><div class="rv-example-head"><strong>示例评价</strong><small>仅用于界面展示</small></div>${full?summaryHTML({summary},true)+`<div class="rv-sort">${SORTS.map(([,label],i)=>`<span class="chip ${i===0?'on':''}">${label}</span>`).join('')}</div>`:''}<div class="rv-list">${itemHTML(review)}</div></section>`;
   }
 
   function render() {
@@ -146,7 +152,7 @@
     if (!data) { body.innerHTML = '<p class="muted">正在读取评价…</p>'; return; }
     const writeButton = '';
     if (!data.total && !current.tag) {
-      body.innerHTML = `<div class="rv-empty"><b>还没有人评价过这里</b>${writeButton}</div>`;
+      body.innerHTML = current.showExample?exampleHTML(true):`<div class="rv-empty"><b>还没有人评价过这里</b>${writeButton}</div>`;
       return;
     }
     const list = data.reviews.length
@@ -157,7 +163,7 @@
       <div class="rv-list">${list}</div>
       ${data.hasMore ? '<button class="btn outline full rv-more" data-rv-more>加载更多评价</button>' : ''}
       ${current.page > 1 ? `<p class="muted rv-count">已显示 ${data.reviews.length} / ${data.total} 条</p>` : ''}
-      ${writeButton}`;
+      ${writeButton}${current.showExample?exampleHTML(false):''}`;
   }
 
   async function load(page = 1, {append = false} = {}) {
@@ -179,17 +185,18 @@
     } catch (error) {
       if (current !== snapshot) return;
       const body = snapshot.el.querySelector('.rv-body');
-      if (body) body.innerHTML = `<p class="muted">评价暂时读取失败：${esc(error.message)}</p><button class="btn outline small" data-rv-retry>重试</button>`;
+      if (body) body.innerHTML = `${snapshot.showExample?exampleHTML(true):''}<p class="muted">评价暂时读取失败：${esc(error.message)}</p><button class="btn outline small" data-rv-retry>重试</button>`;
     } finally {
       if (current === snapshot) snapshot.loading = false;
     }
   }
 
-  function mount(store) {
+  function mount(store,options={}) {
     const el = document.getElementById('storeReviews');
     if (!el || !store) return;
-    el.innerHTML = shell(store);
-    current = {store, el, sort: 'helpful', tag: '', page: 1, data: null, loading: false};
+    const showExample=Boolean(options.won&&store.activity!=='play'&&store.activity!=='travel');
+    el.innerHTML = shell(store,showExample);
+    current = {store, el, showExample, sort: 'helpful', tag: '', page: 1, data: null, loading: false};
     el.dataset.store = storeKey(store);
     const cached = cache.get(storeKey(store));
     if (cached && Date.now() - cached.at < 60000) { current.data = cached.data; render(); return; }
@@ -391,7 +398,7 @@
   function snapshot() {
     return {
       form: document.getElementById('reviewForm') && draft ? {...draft, tags: draft.tags.slice(), photos: draft.photos.slice(), busy: false} : null,
-      list: document.getElementById('storeReviews') && current ? {store: current.store, sort: current.sort, tag: current.tag, page: current.page, data: current.data} : null
+      list: document.getElementById('storeReviews') && current ? {store: current.store, showExample:current.showExample, sort: current.sort, tag: current.tag, page: current.page, data: current.data} : null
     };
   }
   function restore(saved) {

@@ -171,7 +171,7 @@ function detail(s,won=false){
   ${won&&live?`<section id="aiDetails" data-store="${esc(s.id)}" class="intro-box" aria-live="polite">${aiHTML(s)}</section>`:""}
   <section class="reviews-panel" id="storeReviews" data-store="${esc(s.id)}"></section>
   <div class="actions result-actions"><button class="btn" id="route" ${s.manual?'disabled':''}>${live?'在高德查看':'看看路线'} ↗</button>${won?'<button class="btn outline" id="again">再转一次</button>':''}</div><div class="actions utility-actions"><button id="share">🎀 分享卡片</button></div>${won&&state.page!=='freewheel'?`<details class="fold"><summary>${play?'不太想去？换个条件':'不太想吃？换个条件'}</summary><div class="actions"><button class="chip" id="reject">本轮排除</button><button class="chip" data-adjust="limit">近一点</button><button class="chip" data-adjust="budget">便宜一点</button><button class="chip" data-adjust="type">${play?'换一类':'换口味'}</button></div></details>`:""}`);
-  if(window.DouxReviews)window.DouxReviews.mount(s);
+  if(window.DouxReviews)window.DouxReviews.mount(s,{won});
   const token=state.bg;
   if(previewTask)previewTask.then(()=>{
     if(token!==state.bg||state.last?.id!==s.id||!$('#modal').open)return;
