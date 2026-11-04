@@ -12,8 +12,22 @@ function introductionText(value) {
 }
 function reviewText(value) {
   const text=clean(value,800);
-  return !text || /^(暂无|没有|未找到|未检索到|缺少|无)(可核实的|具体的|真实的|同店的?|相关的|用户)*(评价|评论|点评)/.test(text) || /(搜索摘要|资料有限|无法核实|未明确|不宜|不能作为本店评价)/.test(text)
-    ? '暂无相关评价。' : text;
+  if(!text||/^(暂无|没有|未找到|未检索到|缺少|无)(可核实的?|具体的?|真实的?|同店的?|相关的?|用户|顾客|游客|的)*(评价|评论|点评)/.test(text))return '暂无相关评价。';
+  const facts=text.split(/(?<=[。！？；])/u).filter(sentence=>
+    !/(搜索摘要|资料有限|无法核实|未明确|不宜|不能作为本店评价)/.test(sentence)
+  ).join('').trim();
+  return facts||'暂无相关评价。';
+}
+function quoteExists(source, quote) {
+  // Models often fold line breaks in search snippets into spaces. Preserve words and
+  // punctuation: this permits formatting changes, not stitched or paraphrased evidence.
+  const normalize=value=>value.replace(/\s+/gu,' ').trim();
+  const needle=normalize(quote);
+  return normalize(source.title).includes(needle)||normalize(source.text).includes(needle);
+}
+function isRoundup(source) {
+  const pathname=new URL(source.url).pathname;
+  return /\/(toplist|rankings?)(\/|$)/i.test(pathname)||/(榜单|榜單|排行榜|(?:TOP\s*\d+|\d+\s*大).*(?:景点|景點|餐厅|餐廳|去处|去處))/i.test(source.title);
 }
 function publicStore(input) {
   if (!input || input.source !== 'amap' || input.manual) throw Object.assign(new Error('仅支持已关联高德的真实门店'), {status:400});
@@ -92,6 +106,11 @@ function createResearch({config, fetcher=fetch, timeoutMs=23000, allowOptions=fa
     const search = await call('/v1/tools/search', {query,count:5,need_content:false}, 'search');
     if (!Array.isArray(search.results)) throw validation('invalid_search');
     let sources = search.results.slice(0,5).flatMap((item,index)=>item&&typeof item==='object'?[{index, title:clean(item.title,240), url:safeURL(item.url), text:clean(item.summary || item.snippet,2400), publishedAt:clean(item.date,80)}]:[]).filter(s=>s.url && s.text);
+    if(store.source==='amap') {
+      const direct=sources.filter(source=>!isRoundup(source));
+      if(direct.length<sources.length)trace.steps.push({stage:'source_filter',round,status:'filtered',reason:'roundup_source',elapsedMs:0});
+      sources=direct;
+    }
     if (!sources.length) throw validation('no_sources');
     if (store.source==='amap') {
       const review=await call('/chat/completions', {model:base.model, thinking:{type:'disabled'}, max_tokens:700, response_format:{type:'json_object'}, messages:[
@@ -103,7 +122,7 @@ function createResearch({config, fetcher=fetch, timeoutMs=23000, allowOptions=fa
       const approved=new Set((Array.isArray(assessments)?assessments:[]).filter(item=>{
         if(!item||typeof item!=='object')return false;
         const source=sources.find(s=>s.index===item.index),quote=clean(item.quote,600);
-        return source && item.relevance==='DIRECT_RELEVANT' && quote.length>=8 && (source.title.includes(quote)||source.text.includes(quote));
+        return source && item.relevance==='DIRECT_RELEVANT' && quote.trim().length>=8 && quoteExists(source,quote);
       }).map(item=>item.index));
       sources=sources.filter(source=>approved.has(source.index));
       if (!sources.length) throw validation('no_relevant_sources');
@@ -117,10 +136,12 @@ function createResearch({config, fetcher=fetch, timeoutMs=23000, allowOptions=fa
     if(typeof data.introduction!=='string'||!introductionText(data.introduction)||
       (data.selectionReason!=null&&typeof data.selectionReason!=='string')||
       (data.reviewSummary!=null&&typeof data.reviewSummary!=='string'))throw validation('invalid_summary');
-    const evidence=(Array.isArray(data.citations)?data.citations:[]).slice(0,5).flatMap(c=>{
+    // A single source may support many claims. Bound quotes independently of the
+    // five-source search limit, or later review citations disappear from the UI.
+    const evidence=(Array.isArray(data.citations)?data.citations:[]).slice(0,32).flatMap(c=>{
       if(!c||typeof c!=='object')return [];
       const source=sources.find(s=>s.index===c.index),quote=clean(c.quote,600);
-      return source && quote.length>=4 && (source.text.includes(quote)||source.title.includes(quote)) ? [{title:source.title,url:source.url,publishedAt:source.publishedAt,retrievedAt:base.retrievedAt,evidenceType:'search_summary'}] : [];
+      return source && quote.trim().length>=4 && quoteExists(source,quote) ? [{title:source.title,url:source.url,publishedAt:source.publishedAt,retrievedAt:base.retrievedAt,evidenceType:'search_summary'}] : [];
     });
     if (!evidence.length) throw validation('invalid_citations');
     return {...base,status:'ready',introduction:introductionText(data.introduction),selectionReason:clean(data.selectionReason,400),reviewSummary:reviewText(data.reviewSummary),evidence:[...new Map(evidence.map(s=>[s.url,s])).values()]};

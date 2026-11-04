@@ -85,6 +85,54 @@ test('损坏的 JSON、未完成的模型响应和无效搜索结构不能绕过
   assert.equal((await h.research(store)).harness.reason,'no_sources');assert.equal(h.calls.length,2);
 });
 
+test('真实接口常见的换行折叠可通过引用校验，字词改写或跨段拼接仍被拒绝',async()=>{
+  const multiline={...source,summary:'测试餐厅(南门店)\n\n位于广州市南门路1号，主营粤菜。\n\n顾客评价：点心好吃。'};
+  for(const valid of [true,false]) {
+    const h=fixture(({stage})=>{
+      if(stage==='search')return json({results:[multiline]});
+      if(stage==='review')return complete({assessments:[{index:0,relevance:'DIRECT_RELEVANT',quote:'测试餐厅(南门店) 位于广州市南门路1号'}]});
+      return complete({...draft,citations:[{index:0,quote:valid?'主营粤菜。 顾客评价：点心好吃。':'主营粤菜。 点心好吃。'}]});
+    });
+    const result=await h.research(store);
+    assert.equal(result.status,valid?'ready':'empty');
+    assert.equal(result.harness.reason,valid?'passed':'invalid_citations');
+  }
+});
+
+test('地点榜单被程序排除，模型误报直接相关也不能把榜单交给整理阶段',async()=>{
+  const roundup={title:'广州 50 大夜间人气景点',url:'https://example.com/toplist/guangzhou',summary:source.summary};
+  const h=fixture(({stage,body})=>{
+    if(stage==='search')return json({results:[source,roundup]});
+    if(stage==='review')return complete({assessments:[...review.assessments,{index:1,relevance:'DIRECT_RELEVANT',quote:source.summary}]});
+    assert.deepEqual(JSON.parse(body.messages[1].content).sources.map(s=>s.url),[source.url]);
+  });
+  const result=await h.research(store);
+  assert.equal(result.status,'ready');assert.equal(result.evidence.length,1);
+  assert.ok(h.traces[0].steps.some(s=>s.stage==='source_filter'&&s.reason==='roundup_source'));
+});
+
+test('没有可核实的顾客评价时返回统一空评价文案',async()=>{
+  const h=fixture(({stage})=>stage==='summary'?complete({...draft,reviewSummary:'暂无可核实的顾客评价；所给资料未提供具体顾客评论。'}):null);
+  assert.equal((await h.research(store)).reviewSummary,'暂无相关评价。');
+});
+
+test('真实评价附带摘要局限说明时保留评价正文，不误报没有评价',async()=>{
+  const h=fixture(({stage})=>stage==='summary'?complete({...draft,reviewSummary:'顾客提到虾饺口感好，也有评论反映服务员少。资料仅来自搜索摘要，未能核实全部评论。'}):null);
+  assert.equal((await h.research(store)).reviewSummary,'顾客提到虾饺口感好，也有评论反映服务员少。');
+});
+
+test('第六条以后的有效引用仍展示对应来源，不能只展示前五条所属页面',async()=>{
+  const secondary={...source,url:'https://example.com/reviews',summary:source.summary+'顾客称点心好吃，服务员少。'};
+  const h=fixture(({stage})=>{
+    if(stage==='search')return json({results:[source,secondary]});
+    if(stage==='review')return complete({assessments:[...review.assessments,{...review.assessments[0],index:1}]});
+    return complete({...draft,reviewSummary:'有顾客认为点心好吃，也提到服务员少。',citations:[
+      ...Array.from({length:5},()=>({index:0,quote:'主营粤菜'})),{index:1,quote:'顾客称点心好吃，服务员少。'}
+    ]});
+  });
+  assert.deepEqual((await h.research(store)).evidence.map(e=>e.url),[source.url,secondary.url]);
+});
+
 test('上游临时失败最多重试一次，恢复后仍完成校验',async()=>{
   for(const status of [429,503]) {
     const h=fixture(({calls})=>calls.length===1?new Response('private-secret',{status}):null);
