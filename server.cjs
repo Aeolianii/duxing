@@ -15,10 +15,10 @@ function loadConfig(root = __dirname) {
   try { source = fs.readFileSync(path.join(root, '.env'), 'utf8'); } catch {}
   const values = {};
   for (const line of source.split(/\r?\n/)) {
-    const match = line.match(/^\s*(AMAP_JS_KEY|AMAP_SECURITY_CODE|DEEPSEEK_API_KEY|DEEPSEEK_MODEL)\s*=\s*(.*?)\s*$/);
+    const match = line.match(/^\s*(FLI_BIN|AMADEUS_CLIENT_ID|AMADEUS_CLIENT_SECRET|AMAP_JS_KEY|AMAP_SECURITY_CODE|DEEPSEEK_API_KEY|DEEPSEEK_MODEL|TRAVEL_QUOTE_URL|TRAVEL_QUOTE_TOKEN)\s*=\s*(.*?)\s*$/);
     if (match) values[match[1]] = match[2].replace(/^(['"])(.*)\1$/, '$2');
   }
-  return {key: process.env.AMAP_JS_KEY || values.AMAP_JS_KEY || '', security: process.env.AMAP_SECURITY_CODE || values.AMAP_SECURITY_CODE || '', deepseekKey:process.env.DEEPSEEK_API_KEY || values.DEEPSEEK_API_KEY || '', deepseekModel: process.env.DEEPSEEK_MODEL || values.DEEPSEEK_MODEL || 'deepseek-flash'};
+  return {fliBin:process.env.FLI_BIN||values.FLI_BIN,airKey:process.env.AMADEUS_CLIENT_ID||values.AMADEUS_CLIENT_ID,airSecret:process.env.AMADEUS_CLIENT_SECRET||values.AMADEUS_CLIENT_SECRET,quoteURL:process.env.TRAVEL_QUOTE_URL || values.TRAVEL_QUOTE_URL || '',quoteToken:process.env.TRAVEL_QUOTE_TOKEN || values.TRAVEL_QUOTE_TOKEN || '',key: process.env.AMAP_JS_KEY || values.AMAP_JS_KEY || '', security: process.env.AMAP_SECURITY_CODE || values.AMAP_SECURITY_CODE || '', deepseekKey:process.env.DEEPSEEK_API_KEY || values.DEEPSEEK_API_KEY || '', deepseekModel:process.env.DEEPSEEK_MODEL || values.DEEPSEEK_MODEL || 'deepseek-flash'};
 }
 
 // 读取 JSON 请求体；limit 按接口区分，评价带图片时上限比检索接口大得多。
@@ -57,6 +57,13 @@ function createServer({config = loadConfig(), fetcher = fetch, reviews, uploadsD
     if (req.headers.origin && req.headers.origin !== `http://${req.headers.host}`) return json(403, {error:'不允许跨站请求'});
     let url;
     try { url = new URL(req.url, 'http://localhost'); } catch { return json(400, {error:'请求地址无效'}); }
+    const travelRoute=/^\/api\/travel\/(discover|plan|quote|reviews)$/.exec(url.pathname);
+    if(travelRoute && req.method==='POST'){
+      if(!/^application\/json(?:;|$)/i.test(req.headers['content-type']||''))return json(415,{error:'请使用 JSON'});
+      try{const chunks=[];let size=0;for await(const chunk of req){size+=chunk.length;if(size>16384)return json(413,{error:'请求过大'});chunks.push(chunk);}
+        return json(200,await require('./travel-service.cjs').travelAPI(travelRoute[1],JSON.parse(Buffer.concat(chunks)),config,fetcher));
+      }catch(e){return json(400,{error:/^[\u4e00-\u9fff]/.test(e.message)?e.message:'查询失败，请重试'});}
+    }
     if (['/api/store-research','/api/option-research'].includes(url.pathname) && req.method === 'POST') {
       try {
         const input = await readJson(req, 8192);

@@ -35,9 +35,11 @@
 
 ### 想旅游
 
-- 24 座国内城市的候选转盘，支持日期、天数、人均预算、出行方式、兴趣、同行与亲子条件。
-- 抽中城市后生成可编辑的分日行程（替换 / 删除景点、加入必去、放轻松），支持地图展示、保存、草稿恢复与分享卡片。
-- 联网介绍只发送公开城市 / 地点名称，不发送出发城市、日期、预算或同行信息。
+- 出发城市可手填或定位；按自定义标签、成员偏好、预算和日期向 DeepSeek 请求候选城市和景点。轮盘从本次候选中抽取，同时查询目的地资料；确认后生成每日行程和住宿建议。需要服务端 DEEPSEEK_API_KEY。
+- 高德用于地点匹配及市内路线。AI 给出的住宿、开放时间、通勤和票种建议不代表实时库存或已确认优惠。
+- 铁路直接查询 12306 的站名、班次、席别、价格及余票。航空使用 Amadeus 生产 API（服务端 AMADEUS_CLIENT_ID / AMADEUS_CLIENT_SECRET，根据城市坐标自动匹配最近的国内机场）；仅展示人数足够、时间和价格完整的国内直达结果。无密钥不生成航班。去程交通可选，预算可按规划时的去程报价扣除。
+- 可通过 TRAVEL_QUOTE_URL 对接其他库存供应商：POST 请求含 origin、destination、date、mode、people、direction；返回 offers，必须提供整数 availableSeats、mode、service、departurePlace、arrivalPlace、含时区的 departureAt/arrivalAt、priceCNY、provider。实时查询不跳转网站。
+- 打卡与保存留在当前浏览器；匿名评分评论按城市保存在当前后端。新版本使用独立存储键，旧版行程仍保留在浏览器原存储中。
 
 ### 用户评价
 
@@ -236,3 +238,7 @@ node --test visit-picker-test.cjs
 ---
 
 个人学习项目，未指定开源许可证；如需复用其中代码或素材，请先联系仓库维护者。
+
+### 个性化旅游规划
+在旅行条件的「更多条件」中选择每位成员的兴趣及票种。选定目的地并生成草稿后，点击「用 DeepSeek 规划每日行程」。模型会收到草稿中的旅行条件，并参考搜索摘要；具体开放与优惠请以场馆公告为准。打卡随草稿保存。匿名评价按目的地汇总，同一服务实例使用本地文件保存，不跨服务器同步。
+跨城报价支持通过进程环境变量 TRAVEL_QUOTE_URL 和 TRAVEL_QUOTE_TOKEN 连接自有授权服务。接口接收 POST JSON（origin、destination、date、mode），返回 offers 数组，每项包含 mode、service、departurePlace、arrivalPlace、departureAt、arrivalAt（含时区的 ISO 时间）、priceCNY（每人单程人民币价格）、provider，并可提供 seat、availability、priceNote、departureAddress、arrivalAddress、bookingUrl。服务端按到发时间计算耗时，校验查询日期。未配置不会展示估算票价。项目目前没有内置票务平台账号。

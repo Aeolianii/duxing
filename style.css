@@ -305,3 +305,6 @@ dialog.result-full .modal-inner{min-height:100%;overflow:visible;overscroll-beha
 .travel-visit-photos{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}.travel-visit-photos img{display:block;width:88px;height:88px;border-radius:12px;object-fit:cover}
 
 .evidence-quotes summary{font-size:12px;color:var(--muted);cursor:pointer;margin-top:4px}.evidence-quotes p{font-size:12px;line-height:1.7;margin:6px 0 0;color:var(--muted)}
+.trip-day-row{display:flex;align-items:center;gap:.6rem}.trip-day-row .travel-days{flex:1;min-width:0;overflow-x:auto}.trip-refresh{flex:none;border-radius:50%;width:44px;height:44px;padding:0;font-size:25px;line-height:1}
+#travelSettings [hidden]{display:none}
+.trip-sources{margin:1.5rem 0 .75rem;border-top:1px solid #dedbe4;padding-top:.75rem;color:#655876;font-size:.8rem;line-height:1.6}.trip-sources summary{cursor:pointer}.trip-sources ul{padding-left:1.25rem}.trip-sources li+li{margin-top:.35rem}.trip-sources a{color:#5b527e;text-decoration:underline;text-underline-offset:.15em;overflow-wrap:anywhere}.trip-sources a span{white-space:nowrap}
