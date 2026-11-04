@@ -17,7 +17,7 @@ function eventLog(type,id){state.events.push({type,id,at:Date.now()})}
 function find(id){return [...state.candidates,...Object.values(state.catalog||{}),...Doux.stores,...Doux.playStores,...state.custom,...state.favorites].find(s=>s.id===id)}
 function people(){return state.page==='fair'?state.people.map(p=>({...(p.demoOrigin||places[p.place]),mode:p.mode,limit:p.limit})):[{...state.origin,mode:state.config.mode,limit:state.config.limit}]}
 function available(){return state.candidates.filter(s=>!state.excluded.has(s.id)&&(state.repeat||!state.drawn.has(s.id)))}
-function eligible(){const stores=isPlay()?Doux.playStores:Doux.stores;let a=stores.map(s=>Doux.evaluate(s,state.config,people())).filter(s=>s.eligible&&!state.excluded.has(s.id)&&(state.repeat||!state.drawn.has(s.id)));return state.page==='fair'?a.sort(Doux.fairSort):Doux.shuffle(a)}
+function eligible(){const stores=isPlay()?Doux.playStores:Doux.stores;let a=stores.map(s=>Doux.evaluate(s,state.config,people())).filter(s=>s.eligible&&!state.excluded.has(s.id)&&(state.repeat||!state.drawn.has(s.id)));return Doux.ratingOrder(a)}
 function generate(){
   state.bg++; state.request=(state.request||0)+1; state.loading=false; state.searchMessage=''; if(state.page!=='custom')state.stage='map';
   state.candidates=state.page==='custom'?state.custom.slice():state.live?[]:eligible().slice(0,state.config.count);

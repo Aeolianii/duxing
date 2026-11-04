@@ -273,38 +273,48 @@
     const result = await call(done => center ? searcher.searchNearBy(query, center, 20000, done) : searcher.search(query, done));
     return (result?.poiList?.pois || []).map(poi=>normalize(poi)).filter(p => p.location);
   }
+  // Shared by map previews and generation, including requests still in flight.
+  const nearbyCache=new Map(),nearbyPending=new Map();
+  function placeKey(origin,radius,query,page){return JSON.stringify([origin,radius,query.type,query.keyword||'',page]);}
   async function nearby(origin, config) {
     const A = await load();
     const radius = Math.min(50000, Math.max(1000,config.limit*(config.mode==='驾车'?700:config.mode==='公共交通'?400:90)));
-    if (config.activity === 'play') {
-      const pairs = config.types.length ? config.types.map(label => [label, playQueries[label]]).filter(pair => pair[1]) : Object.entries(playQueries);
-      // One query at a time: several parallel PlaceSearch calls trip AMap's
-      // per-key QPS limit, so the extra latency is cheaper than a failed wheel.
-      // Map previews only need a few pins, so they ask fewer categories.
-      const list = config.preview ? pairs.slice(0, 3) : pairs;
-      const groups = [];
-      for (const [label, query] of list) {
-        const result = await call(done => new A.PlaceSearch({type:query.type,pageSize:20,pageIndex:config.pageIndex||1,extensions:'all'}).searchNearBy(query.keyword||'',origin,radius,done));
-        const pois = (result?.poiList?.pois||[]).map(poi=>normalize(poi)).filter(p => p.location && matchesPlay(p, [label]));
-        groups.push(dedupeVenues(pois, label));
-        if (list.length > 1) await new Promise(resolve => setTimeout(resolve, 420));
-      }
-      const unique = new Map();
-      for (let row=0; row<20 && unique.size<20; row++) for (const group of groups) {
-        const store = group[row];
-        if (store && unique.size < 20) unique.set(store.id, decoratePlay(store, unique.size));
-      }
-      return [...unique.values()];
-    }
-    const queries=config.types.length?config.types.map(label=>[label,cuisineQueries[label]]).filter(pair=>pair[1]):[[null,{type:'050000'}]];
+    const play=config.activity==='play',page=config.pageIndex||1;
+    let queries=play?(config.types.length?config.types.map(label=>[label,playQueries[label]]).filter(pair=>pair[1]):Object.entries(playQueries)):
+      (config.types.length?config.types.map(label=>[label,cuisineQueries[label]]).filter(pair=>pair[1]):[[null,{type:'050000'}]]);
+    // Rotate category priority so early stopping does not always favor the same types.
+    if(play)for(let i=queries.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[queries[i],queries[j]]=[queries[j],queries[i]];}
+    const reusable=([,query])=>{const key=placeKey(origin,radius,query,page);return nearbyPending.has(key)||(nearbyCache.get(key)?.expires>Date.now());};
+    queries.sort((a,b)=>Number(reusable(b))-Number(reusable(a)));
+    if(config.preview)queries=queries.slice(0,3);
     const groups=[];let lastError;
     for(const [label,query] of queries){
       if(config.cancelled?.())break;
+      const key=placeKey(origin,radius,query,page);let pois;
       try{
-        await waitRouteSlot('place');
-        const result=await call(done=>new A.PlaceSearch({type:query.type,pageSize:20,pageIndex:config.pageIndex||1,extensions:'all'}).searchNearBy(query.keyword||'',origin,radius,done));
-        groups.push((result?.poiList?.pois||[]).map(poi=>normalize(poi)).filter(p=>p.location&&matchesCuisine(p,label?[label]:[])));
-      }catch(error){lastError=error;}
+        const hit=nearbyCache.get(key);
+        if(hit&&hit.expires>Date.now())pois=hit.pois;
+        else {
+          let pending=nearbyPending.get(key);
+          if(!pending){
+            pending=(async()=>{
+              await waitRouteSlot('place');
+              const result=await call(done=>new A.PlaceSearch({type:query.type,pageSize:20,pageIndex:page,extensions:'all'}).searchNearBy(query.keyword||'',origin,radius,done));
+              const raw=result?.poiList?.pois||[];
+              if(nearbyCache.size>=200)nearbyCache.delete(nearbyCache.keys().next().value);
+              nearbyCache.set(key,{pois:raw,expires:Date.now()+120000});return raw;
+            })().finally(()=>nearbyPending.delete(key));
+            nearbyPending.set(key,pending);
+          }
+          pois=await pending;
+        }
+      }catch(error){lastError=error;continue;}
+      if(config.cancelled?.())break;
+      let batch=pois.map(poi=>normalize(poi)).filter(p=>p.location&&(play?matchesPlay(p,[label]):matchesCuisine(p,label?[label]:[])));
+      if(play)batch=dedupeVenues(batch,label).map(decoratePlay);
+      groups.push(batch);
+      // Backpressure: validate this batch before spending requests on another category.
+      if(config.onBatch&&await config.onBatch(batch)===false)break;
     }
     if(!groups.length&&lastError)throw lastError;
     const unique=new Map();

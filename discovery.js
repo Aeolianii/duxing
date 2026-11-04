@@ -16,7 +16,7 @@ function originList(){return state.page==='fair'?state.people.map((p,i)=>({...p.
 function renderDiscovery(){
   if(state.stage==='loading')return renderGenerating();
   if(state.stage==='wheel'){
-    $('#view').innerHTML=`<div class="step-nav"><button id="backToMap">‹ 返回地图</button><span>② 转一转</span></div>`+((state.activity==='play')?heading('好玩已就位！','候选准备好了，按下开始揭晓这一场。'):heading('美味已就位！','候选准备好了，按下开始揭晓这一餐。'))+wheelPanel()+`<div class="under-wheel"><button id="openCandidates" class="candidate-entry"><span>${(state.activity==='play')?'🎡':'🍽️'}</span><strong>看看候选</strong><small>${available().length} 家</small><span>›</span></button><button id="refresh" class="refresh-entry">↻ 重新生成</button></div><p class="muted sheet-note">${state.live?((state.activity==='play')?'高德场馆与路线数据':'高德餐厅与路线数据'):'演示候选'} · 本轮候选等概率</p>`;
+    $('#view').innerHTML=`<div class="step-nav"><button id="backToMap">‹ 返回地图</button><span>② 转一转</span></div>`+((state.activity==='play')?heading('好玩已就位！','候选准备好了，按下开始揭晓这一场。'):heading('美味已就位！','候选准备好了，按下开始揭晓这一餐。'))+wheelPanel()+`<div class="under-wheel"><button id="openCandidates" class="candidate-entry"><span>${(state.activity==='play')?'🎡':'🍽️'}</span><strong>看看候选</strong><small>${available().length} 家</small><span>›</span></button><button id="refresh" class="refresh-entry">↻ 重新生成</button></div><p class="muted sheet-note">${state.live?((state.activity==='play')?'高德场馆与路线数据':'高德餐厅与路线数据'):'演示候选'} · 高评分更易入选，本轮候选等概率</p>`;
     return;
   }
   const group=state.page==='fair',c=state.config;
@@ -101,10 +101,12 @@ async function loadHomePreviews(){
   const key=JSON.stringify([center,config.types,config.limit,config.mode,state.activity]);
   $('#mapHint').textContent=state.page==='fair'?'点击地图，调整当前成员的出发点':'点击地图选择出发点';
   try{
-    const stores=discovery.cache?.key===key?discovery.cache.stores:await DouxMap.nearby(center,config);
-    discovery.cache={key,stores};if(token!==discovery.previewToken||!$('#homeMap'))return;
+    const cached=discovery.cache?.key===key&&Date.now()-discovery.cache.at<120000;
+    const stores=cached?discovery.cache.stores:await DouxMap.nearby(center,{...config,cancelled:()=>token!==discovery.previewToken||!$('#homeMap')});
+    if(token!==discovery.previewToken||!$('#homeMap'))return;
+    if(!cached)discovery.cache={key,stores,at:Date.now()};
     discovery.previews=[];
-    for(const store of stores){if(discovery.previews.length>=5)break;if(!discovery.previews.some(p=>Math.hypot(p.location[0]-store.location[0],p.location[1]-store.location[1])<.00065))discovery.previews.push(store);}
+    for(const store of Doux.ratingOrder(stores)){if(discovery.previews.length>=5)break;if(!discovery.previews.some(p=>Math.hypot(p.location[0]-store.location[0],p.location[1]-store.location[1])<.00065))discovery.previews.push(store);}
     stores.forEach(s=>state.catalog[s.id]=s);paintHomePins(true);
     if(!stores.length)$('#mapHint').textContent='附近暂未找到'+((state.activity==='play')?'场馆':'餐厅')+'，试试调整位置或筛选。';
   }catch(error){if(token===discovery.previewToken&&$('#mapHint')){discovery.previews=[];paintHomePins(false);$('#mapHint').textContent=error.message;}}
@@ -120,11 +122,15 @@ function updateProgress(value,title,detail){
   const fill=$('#progressFill');if(fill){fill.style.width=value+'%';fill.parentElement.setAttribute('aria-valuenow',value);$('#progressTitle').textContent=title;$('#progressDetail').textContent=detail;}
 }
 async function buildDemoWheel(){
-  const token=++state.request;state.stage='loading';state.loading=true;state.progress={value:15,title:(state.activity==='play')?'正在挑选场馆…':'正在挑选餐厅…',detail:(state.activity==='play')?'模拟筛选类型、预算与路程条件':'模拟筛选口味、预算与营业条件'};render();
+  const token=++state.request;state.stage='loading';state.loading=true;state.progress={value:0,title:(state.activity==='play')?'正在挑选场馆…':'正在挑选餐厅…',detail:(state.activity==='play')?'模拟筛选类型、预算与路程条件':'模拟筛选口味、预算与营业条件'};render();
   await new Promise(r=>setTimeout(r,350));if(token!==state.request)return;
-  updateProgress(65,'正在核对路程…','逐一比较每个人的时间限制');
   const selected=eligible().slice(0,state.config.count);
-  await new Promise(r=>setTimeout(r,350));if(token!==state.request)return;
+  for(let i=0;i<selected.length;i++){
+    if(token!==state.request)return;
+    updateProgress(100*(i+1)/state.config.count,'正在筛选候选…',`已确认 ${i+1} / ${state.config.count} 家`);
+    await new Promise(r=>setTimeout(r,60));
+  }
+  if(token!==state.request)return;
   state.candidates=selected;state.loading=false;state.stage=selected.length?'wheel':'map';state.searchMessage=selected.length?'':'没有符合条件的店，试试放宽筛选';render();window.scrollTo({top:0});
 }
 function handleDiscoveryAction(button){

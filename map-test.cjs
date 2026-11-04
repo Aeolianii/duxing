@@ -390,3 +390,73 @@ test('美食多菜系串行查询，单分类失败保留其他结果并支持�
   const result=await context.window.DouxMap.nearby([113,23],{types:['日料','韩餐'],mode:'步行',limit:30,pageIndex:2});
   assert.equal(peak,1);assert.equal(result.length,1);assert.ok(calls.every(c=>c.pageIndex===2));
 });
+
+
+test('评分抽样提高高分概率，但低分及未知评分仍能入选',()=>{
+  let seed=123456789;const random=()=>{seed=(1664525*seed+1013904223)>>>0;return (seed+.5)/4294967296;};
+  const stores=[{id:'high',rating:4},{id:'low',rating:2},{id:'unknown',rating:null}];
+  const wins={high:0,low:0,unknown:0};
+  for(let i=0;i<12000;i++){const order=core.ratingOrder(stores,random);assert.equal(new Set(order).size,3);wins[order[0].id]++;}
+  assert.ok(wins.high>wins.low*3&&wins.high<wins.low*5);assert.ok(wins.low>0&&wins.unknown>0);
+  assert.equal(core.ratingWeight({rating:0}),9);assert.equal(core.ratingWeight({rating:'bad'}),9);
+});
+
+test('逐批核对、满额停搜，6/8 个目标按有效候选数推进且不超额查询',async()=>{
+  for(const count of [6,8]){
+    const events=[],progress=[];let routes=0;
+    const stores=Array.from({length:20},(_,i)=>({id:'batch'+i,location:[113+i*.001,23],price:30,rating:4}));
+    const h=harness({nearby:async(_p,config)=>{
+      events.push('search1');assert.equal(await config.onBatch(stores.slice(0,2)),true);
+      events.push('search2');assert.equal(await config.onBatch(stores.slice(2)),false);
+      return stores;
+    },route:async()=>{events.push('route');routes++;return 10;}});
+    h.state.config.count=count;h.updateProgress=value=>progress.push(value);
+    await h.refreshCandidates();
+    assert.equal(h.state.candidates.length,count);assert.equal(routes,count);
+    assert.ok(events.indexOf('route')<events.indexOf('search2'));
+    for(let i=1;i<=count;i++)assert.ok(progress.some(p=>Math.abs(p-100*i/count)<.00001));
+    assert.ok(progress.every((p,i)=>p>=0&&p<=100&&(!i||p>=progress[i-1])));
+  }
+});
+
+test('不合格地点不推进完成数，候选不足不会假报100%',async()=>{
+  const h=harness({nearby:async()=>[{id:'bad',location:[113,23],price:99},{id:'good',location:[113,23],price:20}],route:async()=>10});
+  h.state.config.budget=30;await h.refreshCandidates();assert.equal(h.state.candidates.length,1);
+  assert.equal(h.state.progress.value,100/6);
+});
+
+test('相同条件直接复用完整预览池，并重新验证预算和路线',async()=>{
+  let searches=0,routes=0;
+  const h=harness({nearby:async()=>{searches++;return [];},route:async()=>{routes++;return 10;}});
+  h.state.activity='food';h.state.config.count=2;h.state.config.budget=50;
+  vm.runInContext(`discovery.cache={key:JSON.stringify([[113,23],[],15,'步行','food']),at:Date.now(),stores:[{id:'expensive',price:100,location:[113,23]},...['a','b'].map(id=>({id,price:30,location:[113,23]}))]}`,h);
+  await h.refreshCandidates();assert.equal(searches,0);assert.equal(routes,2);assert.equal(h.state.candidates.length,2);
+  h.state.origin.location=[114,23];await h.refreshCandidates();assert.equal(searches,1);
+});
+
+test('附近搜索共享预览请求和缓存，停止后不查后续分类，换位置需重查',async()=>{
+  let calls=0,finish;
+  const AMap={plugin(_n,done){done();},PlaceSearch:class{searchNearBy(_q,_p,_r,done){calls++;finish=()=>done('complete',{poiList:{pois:[{id:'food',name:'餐厅',location:'113,23',type:'餐饮服务'}]}});}}};
+  const context={window:{AMap},location:{origin:'http://localhost'},document:{createElement:()=>({remove(){}}),head:{append(script){script.onload();}}},fetch:async()=>({ok:true,json:async()=>({configured:true,key:'test'})}),AbortSignal,setTimeout:(f,ms)=>setTimeout(f,ms===12000?ms:0),clearTimeout};
+  vm.createContext(context);vm.runInContext(fs.readFileSync(__dirname+'/amap-client.js','utf8'),context);
+  const map=context.window.DouxMap,config={types:['日料','韩餐'],mode:'步行',limit:15};
+  const preview=map.nearby([113,23],{...config,preview:true,onBatch:()=>false});
+  while(!finish)await new Promise(r=>setImmediate(r));
+  const wheel=map.nearby([113,23],{...config,onBatch:()=>false});
+  await new Promise(r=>setImmediate(r));assert.equal(calls,1);finish();await Promise.all([preview,wheel]);
+  await map.nearby([113,23],{...config,onBatch:()=>false});assert.equal(calls,1);
+  finish=null;const moved=map.nearby([114,23],{...config,onBatch:()=>false});
+  while(!finish)await new Promise(r=>setTimeout(r,1));finish();await moved;assert.equal(calls,2);
+});
+
+
+test('地图预览使用评分抽样，保留完整池供生成复用',async()=>{
+  const stores=Array.from({length:8},(_,i)=>({id:String(i),location:[113+i*.01,23],rating:1+i/2}));
+  const h=harness({nearby:async()=>stores});let weighted=0;
+  h.Doux={...core,ratingOrder:items=>{weighted++;return items.slice().reverse();}};
+  h.originList=()=>[{location:[113,23],mode:'步行',limit:15}];h.paintHomePins=()=>{};
+  await h.loadHomePreviews();
+  assert.equal(weighted,1);
+  assert.deepEqual(Array.from(vm.runInContext('discovery.previews.map(s=>s.id)',h)),['7','6','5','4','3']);
+  assert.equal(vm.runInContext('discovery.cache.stores.length',h),8);
+});

@@ -79,34 +79,29 @@ async function refreshCandidates(){
   if(!state.live)return buildDemoWheel();
   const origins=realOrigins();
   if(origins.some(p=>!p.location)){state.searchMessage='请先选好'+(state.page==='fair'?'每个人的':'你的')+'出发点';render();return state.page==='fair'?openPeople():openLocation();}
-  const token=++state.request;state.loading=true;state.stage='loading';state.progress={value:8,title:(state.activity==='play')?'正在寻找附近场馆…':'正在寻找附近餐厅…',detail:'先按类型和可达范围搜索'};state.candidates=[];state.searchMessage='';render();
+  const token=++state.request;state.loading=true;state.stage='loading';state.progress={value:0,title:(state.activity==='play')?'正在寻找附近场馆…':'正在寻找附近餐厅…',detail:'先按类型和可达范围搜索'};state.candidates=[];state.searchMessage='';render();
   const config={...state.config,types:[...state.config.types],activity:state.activity},fair=state.page==='fair';
   const deadline=Date.now()+(fair?Math.min(120000,45000+origins.length*15000):45000);
   const active=()=>token===state.request&&Date.now()<deadline;
   const matches=[],seen=new Set();let failures=0,completed=0,checked=0,searchFailures=0,searchError='',budgetRejected=0,hoursRejected=0,routeRejected=0;
-  try{
-    const jobs=meetingSearches(origins,config);
-    for(let jobIndex=0;jobIndex<jobs.length&&active()&&matches.length<config.count;jobIndex++){
-      const job=jobs[jobIndex];let pool;
-      updateProgress(Math.min(85,10+jobIndex*10),jobIndex?'正在补充集合区域…':config.activity==='play'?'正在寻找附近场馆…':'正在寻找附近餐厅…',`已找到 ${matches.length} 家，按${fair?'每个人':'你'}的路程继续查找`);
-      try{pool=await DouxMap.nearby(job.point,{...job.config,cancelled:()=>!active()});}catch(error){searchFailures++;searchError=error.message;continue;}
-      if(token!==state.request)return;
-      pool=Doux.shuffle(pool).filter(s=>!seen.has(s.id)&&!state.excluded.has(s.id)&&(state.repeat||!state.drawn.has(s.id)));
+  const report=()=>updateProgress(100*matches.length/config.count,'正在筛选候选…',`已确认 ${matches.length} / ${config.count} 家 · 已检查 ${checked} 家`);
+  async function checkBatch(stores){
+      if(!active()||matches.length>=config.count)return false;
+      const pool=Doux.ratingOrder(stores.filter(s=>!seen.has(s.id)&&!state.excluded.has(s.id)&&(state.repeat||!state.drawn.has(s.id))));
       pool.forEach(s=>seen.add(s.id));
-      const score=store=>Math.max(...origins.map(p=>meetingDistance(p.location,store.location)/meetingReach(p)));
-      if(fair)pool.sort((a,b)=>score(a)-score(b));
-      let cursor=0;
-      async function worker(){while(cursor<pool.length&&active()&&matches.length<config.count){
+      let cursor=0,inFlight=0;
+      async function worker(){while(cursor<pool.length&&active()&&matches.length+inFlight<config.count){
         const store=pool[cursor++];
         if(config.budget&&(store.price==null?!config.unknownPrice:store.price>config.budget)){budgetRejected++;checked++;continue;}
         // Without usable opening hours the arrival check is impossible; skip the
         // route queries only for those stores when the strict filter is on.
         if(config.open&&!config.unknownHours&&!(Array.isArray(store.hours)&&store.hours.length)){hoursRejected++;checked++;continue;}
+        inFlight++;
         try{
           const times=Array(origins.length).fill(null);
           const order=origins.map((origin,index)=>({origin,index,score:meetingDistance(origin.location,store.location)/meetingReach(origin)})).sort((a,b)=>b.score-a.score);
           for(const {origin,index} of order){
-            if(!active())break;
+            if(!active()||matches.length>=config.count)break;
             const minutes=await DouxMap.route(origin.location,store.location,origin.mode,{city:origin.city,cityd:store.city});
             if(token!==state.request)return;
             times[index]=minutes;
@@ -116,13 +111,31 @@ async function refreshCandidates(){
           completed++;
           const arrival=(localMinuteOfDay()+Math.max(...times))%1440;
           const opening=times.every(Number.isFinite)&&Array.isArray(store.hours)&&store.hours.length?Doux.openAt(store.hours,arrival):null;
-          if(DouxMap.eligible(store,config,times,origins.map(p=>p.limit),opening)){
+          if(active()&&matches.length<config.count&&DouxMap.eligible(store,config,times,origins.map(p=>p.limit),opening)){
             matches.push({...store,times,max:Math.max(...times),gap:Math.max(...times)-Math.min(...times),sum:times.reduce((a,b)=>a+b,0),opening,routeMode:fair?'多人最长路程':config.mode,routeKey:routeContext(store).key,routeCheckedAt:Date.now(),routeStatus:'ready'});
           }
-        }catch{failures++;}
-        checked++;if(token===state.request)updateProgress(Math.min(95,20+Math.round(70*checked/Math.max(1,seen.size))),'正在核对每个人的路线…',`已检查 ${checked} 家，符合条件 ${matches.length} 家`);
+        }catch{failures++;}finally{inFlight--;}
+        checked++;if(token===state.request)report();
       }}
-      await Promise.all([worker(),worker()]);
+      // Do not start more route checks than the number of remaining slots.
+      await Promise.all(Array.from({length:Math.min(2,config.count-matches.length)},()=>worker()));
+      return active()&&matches.length<config.count;
+  }
+  try{
+    // Reuse the complete preview pool, not only the five visible pins. Its search
+    // key includes origins, types and range; budget/hours are validated afresh.
+    const center=[0,1].map(i=>origins.reduce((n,p)=>n+p.location[i],0)/origins.length);
+    const previewKey=JSON.stringify([center,config.types,Math.max(...origins.map(p=>p.limit)),origins.some(p=>p.mode==='驾车')?'驾车':origins.some(p=>p.mode==='公共交通')?'公共交通':'步行',state.activity]);
+    if(typeof discovery!=='undefined'&&discovery.cache?.key===previewKey&&Date.now()-discovery.cache.at<120000)await checkBatch(discovery.cache.stores);
+    const jobs=meetingSearches(origins,config);
+    for(const job of jobs){
+      if(!active()||matches.length>=config.count)break;
+      report();
+      try{
+        const pool=await DouxMap.nearby(job.point,{...job.config,cancelled:()=>!active()||matches.length>=config.count,onBatch:checkBatch});
+        // Also supports adapters returning a single complete batch.
+        await checkBatch(pool);
+      }catch(error){searchFailures++;searchError=error.message;}
     }
     if(token!==state.request)return;
     state.candidates=(fair?matches.sort(Doux.fairSort):Doux.shuffle(matches)).slice(0,config.count);
@@ -137,7 +150,7 @@ async function refreshCandidates(){
       completed?(fair?'本次检索的店暂未同时满足所有人的路程，请检查各成员的出行方式与时间':'本次候选暂未满足你的路程，请检查出行方式与时间'):
       '本次范围暂无可用候选，可调整位置、类别或开启新一轮';
   }catch(error){if(token===state.request)state.searchMessage=error.message;}
-  finally{if(token===state.request){state.loading=false;state.stage=state.candidates.length?'wheel':'map';if(state.candidates.length)updateProgress(100,'候选已就位','转盘已准备好');render();window.scrollTo({top:0});}}
+  finally{if(token===state.request){state.loading=false;state.stage=state.candidates.length?'wheel':'map';if(state.candidates.length)updateProgress(100*state.candidates.length/config.count,'候选已就位',`已确认 ${state.candidates.length} / ${config.count} 家`);render();window.scrollTo({top:0});}}
 }
 
 const detailTasks=new Map(),detailCache=new Map();
