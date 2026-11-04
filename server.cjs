@@ -16,7 +16,7 @@ function loadConfig(root = __dirname) {
 
 function createServer({config = loadConfig(), fetcher = fetch} = {}) {
   const research=createResearch({config,fetcher}),optionResearch=createResearch({config,fetcher,allowOptions:true});
-  const files = new Set(['index.html', 'style.css', 'app.js', 'core.js', 'amap-client.js', 'map-ui.js', 'discovery.js', 'ai-client.js', 'freewheel.js', 'assets/food.png', 'assets/play.png', 'assets/travel.png', 'assets/custom.png']);
+  const files = new Set(['index.html', 'style.css', 'app.js', 'core.js', 'amap-client.js', 'map-ui.js', 'discovery.js', 'ai-client.js', 'freewheel.js','travel-core.js','travel.js', 'assets/food.png', 'assets/play.png', 'assets/travel.png', 'assets/custom.png']);
   const types = {'.html':'text/html; charset=utf-8', '.js':'application/javascript; charset=utf-8', '.css':'text/css; charset=utf-8', '.png':'image/png'};
   return http.createServer(async (req, res) => {
     res.setHeader('Cache-Control', 'no-store');

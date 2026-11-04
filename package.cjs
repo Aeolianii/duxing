@@ -5,7 +5,7 @@ const script=`
 from pathlib import Path
 import zipfile
 root=Path.cwd()
-files=['index.html','style.css','app.js','core.js','amap-client.js','map-ui.js','discovery.js','server.cjs','ai-service.cjs','ai-client.js','freewheel.js','ai-test.cjs','test.cjs','map-test.cjs','package.cjs','.env.example','README.md','高德接入说明.md','验证记录.md','启动原型.cmd']
+files=['index.html','style.css','app.js','core.js','amap-client.js','map-ui.js','discovery.js','server.cjs','ai-service.cjs','ai-client.js','freewheel.js','travel-core.js','travel.js','travel-test.cjs','ai-test.cjs','test.cjs','map-test.cjs','package.cjs','.env.example','README.md','高德接入说明.md','验证记录.md','启动原型.cmd']
 destination=root.parent/'都行-demo原型.zip'
 with zipfile.ZipFile(destination,'w',zipfile.ZIP_DEFLATED) as bundle:
     for name in files: bundle.write(root/name,'demo/'+name)
