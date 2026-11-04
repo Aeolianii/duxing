@@ -217,6 +217,9 @@ test('通用转盘仅发送中奖名称，检索摘要后生成带来源的简�
 
 function previewHarness(){
   const elements={'#nav':{},'#modal':{open:false,querySelector(){return null},addEventListener(){},showModal(){this.open=true;},close(){this.open=false;}},'#modal-content':{innerHTML:''}};
+  const modalClasses=new Set();
+  elements['#modal'].classList={toggle(name,on){if(on)modalClasses.add(name);else modalClasses.delete(name);},contains(name){return modalClasses.has(name);}};
+  elements['#modal'].querySelector=selector=>selector==='.result-topbar'&&elements['#modal-content'].innerHTML.includes('class="result-topbar"')?{}:null;
   const context={console,Doux:require('./core.js'),localStorage:{getItem(){return null},setItem(){}},window:{},document:{hidden:false,addEventListener(){},querySelector(selector){return elements[selector]||null;}},setTimeout,clearTimeout};
   vm.createContext(context);vm.runInContext(fs.readFileSync(__dirname+'/app.js','utf8'),context);
   context.render=()=>{};context.toast=()=>{};

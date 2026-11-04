@@ -30,9 +30,9 @@
   function capture(){
     const r=route(),view=$('#view');
     const modal=dialog.open?{
-      key:(dialog.querySelector('.modal-top h3')?.textContent||'')+':'+(dialog.querySelector('[data-store]')?.dataset.store||''),
+      key:(dialog.querySelector('.modal-top h3,.result-topbar h3')?.textContent||'')+':'+(dialog.querySelector('[data-store]')?.dataset.store||''),
       html:$('#modal-content .modal-inner')?.innerHTML||$('#modal-content').innerHTML,
-      fields:fields(dialog),scroll:$('#modal-content').scrollTop,last:state.last,won:state.detailWon,
+      fields:fields(dialog),scroll:$('#modal-content').scrollTop,last:state.last,won:state.detailWon,reviews:window.DouxReviews?.snapshot(),
       map:dialog.querySelector('#realMap')?{target:mapUI.target,draft:mapUI.draft,results:mapUI.results.slice(),html:$('#mapResults').innerHTML}:null,
       profile:dialog.querySelector('#currentUsername')?state.profileDraft:null,
       travelLast:travel.last,freeLast:freeWheel.last,travelInfo:travel.info,freeInfo:freeWheel.info
@@ -46,7 +46,7 @@
     if(current.modal&&dialog.open){current.modal.fields=fields(dialog);current.modal.scroll=$('#modal-content').scrollTop;current.modal.html=$('#modal-content .modal-inner')?.innerHTML||'';}
     if(!current.modal){current.fields=fields($('#view'));current.scroll=window.scrollY;drafts.set(current.route.key,current.fields);}
     if(current.route.key===next.route.key){current.route=next.route;current.meal=next.meal;if(current.modal&&next.modal?.key===current.modal.key)current.modal=next.modal;}
-    if(dialog.open&&current.modal&&dialog.querySelector('#visitForm,#currentUsername,#mapSearch'))modalDrafts.set(current.modal.key,current.modal);
+    if(dialog.open&&current.modal&&dialog.querySelector('#visitForm,#currentUsername,#mapSearch,#reviewForm'))modalDrafts.set(current.modal.key,current.modal);
   }
   function write(entry,replace=false){
     if(replace)entries[cursor]=entry;
@@ -113,7 +113,7 @@
         if(dialog.querySelector('#freeKnowledge')){$('#freeKnowledge').innerHTML=freeKnowledge();if(freeWheel.info?.status==='loading')researchFreeOption(freeWheel.last,freeWheel.round);}
         if(m.profile)$('#saveUsername').disabled=false;
       }
-      restoreFields(dialog,m.fields);$('#modal-content').scrollTop=m.scroll;
+      restoreFields(dialog,m.fields);window.DouxReviews?.restore(m.reviews);$('#modal-content').scrollTop=m.scroll;
     }
     applying=false;
   }
@@ -122,7 +122,7 @@
     if(!applying)remember();originalModal(html);
     if(!applying){
       const draft=modalDrafts.get(capture().modal.key);
-      if(draft){restoreFields(dialog,draft.fields);if(draft.profile){state.profileDraft=draft.profile;$('#profileAvatarPreview').innerHTML=avatarIcon(draft.profile.avatar);}}
+      if(draft){restoreFields(dialog,draft.fields);window.DouxReviews?.restore(draft.reviews);if(draft.profile){state.profileDraft=draft.profile;$('#profileAvatarPreview').innerHTML=avatarIcon(draft.profile.avatar);}}
     }
     schedule();
   };
@@ -159,6 +159,7 @@
     if(event.target.id!=='visitForm')return;const key=entries[cursor]?.modal?.key;
     setTimeout(()=>{if(!dialog.open)modalDrafts.delete(key);},0);
   },true);
+  document.addEventListener('doux:review-saved',()=>modalDrafts.delete(entries[cursor]?.modal?.key));
   for(const type of ['input','change'])document.addEventListener(type,()=>queueMicrotask(remember));
   entries.push(capture());history.replaceState({douxNavigation:session,index:0},'');
   if('scrollRestoration' in history)history.scrollRestoration='manual';
