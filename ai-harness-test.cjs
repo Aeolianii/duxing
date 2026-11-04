@@ -198,7 +198,7 @@ test('不同来源的逐句引用分别保留原文与来源，不因来源条�
   const result=await h.research(store);
   assert.equal(result.status,'ready');
   assert.deepEqual(result.evidence.map(e=>e.url),[source.url,secondary.url]);
-  assert.ok(result.evidence.every(e=>e.quote&&e.sentence));
+  assert.ok(result.evidence.every(e=>e.quotes.length&&e.quotes.every(q=>q.quote&&q.sentence)));
 });
 
 test('未登记引用的句子会被剪掉，只保留有逐字引用支持的文案',async()=>{
@@ -232,7 +232,7 @@ test('引用指向输出里不存在的句子时被忽略，不进入证据',asy
   ]}):null);
   const result=await h.research(store);
   assert.equal(result.status,'ready');assert.equal(result.evidence.length,1);
-  assert.equal(result.evidence[0].quote,'主营粤菜');assert.ok(result.evidence[0].sentence);
+  assert.equal(result.evidence[0].quotes[0].quote,'主营粤菜');assert.ok(result.evidence[0].quotes[0].sentence);
 });
 
 test('同一句由多条不同原文支持时，证据分别保留可核对的 quote',async()=>{
@@ -242,8 +242,20 @@ test('同一句由多条不同原文支持时，证据分别保留可核对的 q
     {index:0,quote:'主营粤菜',sentence:introduction}
   ]}):null);
   const result=await h.research(store);
-  assert.equal(result.status,'ready');
-  assert.deepEqual(result.evidence.map(e=>e.quote),['测试餐厅(南门店)位于广州市南门路1号','主营粤菜']);
+  assert.equal(result.status,'ready');assert.equal(result.evidence.length,1);
+  assert.deepEqual(result.evidence[0].quotes.map(q=>q.quote),['测试餐厅(南门店)位于广州市南门路1号','主营粤菜']);
+});
+
+test('同一篇文章被多个句子引用时只列出一个来源，原文逐条保留',async()=>{
+  const h=fixture(({stage})=>stage==='summary'?complete({...draft,introduction:'这是一家主营粤菜的餐厅。',selectionReason:'它位于广州市南门路1号，可以试试。',citations:[
+    {index:0,quote:'主营粤菜',sentence:'这是一家主营粤菜的餐厅。'},
+    {index:0,quote:'位于广州市南门路1号',sentence:'它位于广州市南门路1号，可以试试。'}
+  ]}):null);
+  const result=await h.research(store);
+  assert.equal(result.status,'ready');assert.equal(result.evidence.length,1);
+  assert.equal(result.evidence[0].url,source.url);
+  assert.deepEqual(result.evidence[0].quotes.map(q=>q.quote),['主营粤菜','位于广州市南门路1号']);
+  assert.ok(result.evidence[0].quotes.every(q=>q.sentence));
 });
 
 test('上游临时失败最多重试一次，恢复后仍完成校验',async()=>{
@@ -334,5 +346,25 @@ test('服务端接入执行记录，诊断文件与脚本不会成为公开静�
     }
     assert.deepEqual(traces.map(t=>t.kind),['store','option']);
     for(const name of ['data/ai-traces.json','ai-harness.cjs','ai-eval.cjs'])assert.equal((await fetch(base+'/'+name)).status,404);
+  } finally { await new Promise(r=>server.close(r)); }
+});
+
+test('接口返回的证据按文章聚合，同一来源在结果里只出现一次',async()=>{
+  const server=createServer({config:{deepseekKey:'test'},traceStore:{record(){}},fetcher:async(url,options)=>{
+    const body=JSON.parse(options.body);
+    if(String(url).endsWith('/search'))return json({results:[source]});
+    if(body.messages[0].content.startsWith('你只负责审核搜索来源'))return complete(review);
+    return complete({...draft,introduction:'这是一家主营粤菜的餐厅。',selectionReason:'它位于广州市南门路1号。',citations:[
+      {index:0,quote:'主营粤菜',sentence:'这是一家主营粤菜的餐厅。'},
+      {index:0,quote:'位于广州市南门路1号',sentence:'它位于广州市南门路1号。'}
+    ]});
+  }});
+  await new Promise(r=>server.listen(0,'127.0.0.1',r));const base='http://127.0.0.1:'+server.address().port;
+  try {
+    const result=await (await fetch(base+'/api/store-research',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(store)})).json();
+    assert.equal(result.status,'ready');
+    assert.equal(result.evidence.length,1);
+    assert.equal(result.evidence[0].url,source.url);
+    assert.deepEqual(result.evidence[0].quotes.map(q=>q.quote),['主营粤菜','位于广州市南门路1号']);
   } finally { await new Promise(r=>server.close(r)); }
 });

@@ -224,6 +224,19 @@ test('结果来源展示逐字原文与控制字符转义，方便核对句子�
   assert.equal(h.context.aiHTML({...store,ai:{...ai,evidence:[{title:'旧格式',url:'https://example.com/b'}]}}).includes('原文：'),false);
 });
 
+test('同一篇文章的多条原文合并展示，来源链接只出现一次',()=>{
+  const h=harness(async()=>true);
+  const ai={status:'ready',model:'deepseek-flash',introduction:'主营粤菜。',reviewSummary:'暂无相关评价。',evidence:[
+    {title:'同一来源',url:'https://example.com/a',quotes:[{quote:'主营粤菜'},{quote:'位于南门路1号'},{quote:'口碑不错'}]},
+    {title:'另一来源',url:'https://example.com/b',quotes:[{quote:'顾客评价好'}]}
+  ]};
+  const html=h.context.aiHTML({...store,ai});
+  assert.equal((html.match(/同一来源/g)||[]).length,1);
+  assert.equal((html.match(/href="https:\/\/example\.com\/a"/g)||[]).length,1);
+  assert.match(html,/3 条原文/);assert.match(html,/原文：主营粤菜/);assert.match(html,/原文：位于南门路1号/);assert.match(html,/原文：口碑不错/);
+  assert.match(html,/原文：顾客评价好/);assert.doesNotMatch(html,/2 条原文/);
+});
+
 test('空资料显示原因，服务超时与分店不匹配不能显示成相同的无信息提示',()=>{
   const h=harness(async()=>true);
   const render=harness=>h.context.aiHTML({...store,ai:{status:'empty',harness}});

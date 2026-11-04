@@ -110,6 +110,17 @@ async function background(a,token=state.bg){
     done++;if(el)el.textContent='其他候选资料已准备 '+done+' 家'+(s.source==='amap'?'':'（模拟）');
   }
 }
+function evidenceQuotes(e){
+  return Array.isArray(e.quotes)?e.quotes.filter(q=>q&&typeof q.quote==='string'&&q.quote):(typeof e.quote==='string'&&e.quote?[{quote:e.quote,sentence:e.sentence}]:[]);
+}
+function evidenceHTML(list){
+  return (list||[]).map(e=>{
+    const quotes=evidenceQuotes(e);
+    const source=`<a href="${esc(e.url)}" target="_blank" rel="noopener noreferrer">${esc(e.title||'查看来源')} ↗</a>`;
+    if(quotes.length<2)return source+(quotes.length?`<small class="muted">原文：${esc(quotes[0].quote.slice(0,120))}</small>`:'');
+    return source+`<details class="evidence-quotes"><summary>${quotes.length} 条原文</summary>${quotes.map(q=>`<p class="muted">原文：${esc(q.quote.slice(0,120))}</p>`).join('')}</details>`;
+  }).join('');
+}
 function aiHTML(s){
   if(s.source!=='amap'||s.manual)return '';
   const ai=s.ai;
@@ -127,7 +138,7 @@ function aiHTML(s){
   const rawReview=typeof ai.reviewSummary==='string'?ai.reviewSummary.trim():'';
   const review=rawReview||'暂无相关评价。';
   const brand=ai.scope==='brand';
-  return `<b>AI 整理 · ${esc(ai.model)}</b>${brand?`<p class="muted">以下为「${esc(ai.brandName||'该品牌')}」的通用资料，尚未核实这家分店的具体特色与服务。</p>`:''}<p class="detail-copy"><b>${brand?'品牌介绍':'介绍'}</b><br>${esc(ai.introduction||'暂无可核实的同店介绍。')}</p>${review?`<p class="detail-copy"><b>${brand?'本店评价':'评价'}</b><br>${esc(brand?'暂无可核实的本店评价。':review)}</p>`:''}<p class="muted">基于搜索摘要，资料有限；请核对具体分店。</p><div class="section-list">${(ai.evidence||[]).map(e=>`<a href="${esc(e.url)}" target="_blank" rel="noopener noreferrer">${esc(e.title||'查看来源')} ↗</a>${typeof e.quote==='string'&&e.quote?`<small class="muted">原文：${esc(e.quote.slice(0,120))}</small>`:''}`).join('')}</div>`;
+  return `<b>AI 整理 · ${esc(ai.model)}</b>${brand?`<p class="muted">以下为「${esc(ai.brandName||'该品牌')}」的通用资料，尚未核实这家分店的具体特色与服务。</p>`:''}<p class="detail-copy"><b>${brand?'品牌介绍':'介绍'}</b><br>${esc(ai.introduction||'暂无可核实的同店介绍。')}</p>${review?`<p class="detail-copy"><b>${brand?'本店评价':'评价'}</b><br>${esc(brand?'暂无可核实的本店评价。':review)}</p>`:''}<p class="muted">基于搜索摘要，资料有限；请核对具体分店。</p><div class="section-list">${evidenceHTML(ai.evidence)}</div>`;
 }
 function updateAI(s){updateSelectionReason(s);const el=$('#aiDetails');if(el&&el.dataset.store===s.id&&$('#modal').open)el.innerHTML=aiHTML(s)}
 async function retryAI(){

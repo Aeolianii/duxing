@@ -35,9 +35,15 @@ async function researchTravel(city,round){
   catch(error){if(round===travel.round)travel.info={status:'error',error:error.name==='TimeoutError'?'检索超时，可重试或先生成行程。':error.message};}
   if(round===travel.round&&$('#travelKnowledge'))$('#travelKnowledge').innerHTML=travelKnowledge();
 }
+function travelSourceHTML(s){
+  const quotes=Array.isArray(s.quotes)?s.quotes.filter(q=>q&&typeof q.quote==='string'&&q.quote):(typeof s.quote==='string'&&s.quote?[{quote:s.quote}]:[]);
+  const source=`<a href="${esc(s.url)}" target="_blank" rel="noopener noreferrer">${esc(s.title||'查看来源')}</a>`;
+  if(quotes.length<2)return source+(quotes.length?`<small class="muted">原文：${esc(quotes[0].quote.slice(0,120))}</small>`:'');
+  return source+`<details class="evidence-quotes"><summary>${quotes.length} 条原文</summary>${quotes.map(q=>`<p class="muted">原文：${esc(q.quote.slice(0,120))}</p>`).join('')}</details>`;
+}
 function travelKnowledge(){const info=travel.info;
   if(info?.status==='loading')return '<p role="status">正在查这座城的资料，你也可以先规划行程…</p>';
-  if(info?.status==='ready')return `<p>${esc(info.introduction)}</p><details><summary>资料来源与查询时间</summary><p>AI 根据搜索摘要整理；仅作旅行灵感，季节信息请核对适用时间。查询于 ${esc(new Date(info.retrievedAt).toLocaleString('zh-CN'))}</p>${(info.evidence||[]).filter(s=>/^https?:\/\//.test(s.url)).map(s=>`<a href="${esc(s.url)}" target="_blank" rel="noopener noreferrer">${esc(s.title||'查看来源')}</a>${typeof s.quote==='string'&&s.quote?`<small class="muted">原文：${esc(s.quote.slice(0,120))}</small>`:''}`).join('')}</details>`;
+  if(info?.status==='ready')return `<p>${esc(info.introduction)}</p><details><summary>资料来源与查询时间</summary><p>AI 根据搜索摘要整理；仅作旅行灵感，季节信息请核对适用时间。查询于 ${esc(new Date(info.retrievedAt).toLocaleString('zh-CN'))}</p>${(info.evidence||[]).filter(s=>/^https?:\/\//.test(s.url)).map(travelSourceHTML).join('')}</details>`;
   return `<p>${esc(info?.error||'暂无可靠的联网介绍，先参考本地旅行灵感。')}</p><button class="btn secondary small" id="travelRetry">重新检索</button>`;
 }
 function showTravelResult(){const city=travel.last;if(!city)return;

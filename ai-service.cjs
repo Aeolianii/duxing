@@ -58,6 +58,19 @@ function quoteSupportsClaim(sentence, quote) {
   }
   return false;
 }
+// 同一篇文章常被多句文案引用。证据按文章聚合，原文逐条保留，避免结果页把同一来源重复列出。
+function groupEvidence(items) {
+  const articles=new Map();
+  for(const item of items) {
+    let article=articles.get(item.url);
+    if(!article) {
+      article={title:item.title,url:item.url,publishedAt:item.publishedAt,retrievedAt:item.retrievedAt,evidenceType:item.evidenceType,quotes:[]};
+      articles.set(item.url,article);
+    }
+    if(!article.quotes.some(quote=>quote.quote===item.quote&&quote.sentence===item.sentence))article.quotes.push({quote:item.quote,sentence:item.sentence});
+  }
+  return [...articles.values()].slice(0,32);
+}
 function brandNameFor(store) {
   if(store.source!=='amap'||store.activity!=='food')return '';
   const match=/^(.+?)[（(][^()（）]*店[^()（）]*[)）]\s*$/u.exec(store.name);
@@ -215,7 +228,7 @@ function createResearch({config, fetcher=fetch, timeoutMs=23000, allowOptions=fa
       evidence=evidence.filter(item=>visible.some(seen=>covered.has(seen.key)&&claimMatchesSentence(seen.sentence,item.sentence)&&quoteSupportsClaim(seen.sentence,item.quote)));
       if(!evidence.length)throw validation('invalid_citations');
     }
-    return {...base,status:'ready',introduction:fieldText.introduction,selectionReason:fieldText.selectionReason,reviewSummary:fieldText.reviewSummary,evidence:[...new Map(evidence.map(item=>[item.url+'\u0000'+item.quote,item])).values()].slice(0,32),
+    return {...base,status:'ready',introduction:fieldText.introduction,selectionReason:fieldText.selectionReason,reviewSummary:fieldText.reviewSummary,evidence:groupEvidence(evidence),
       ...(store.scope==='brand'?{scope:'brand',brandName:store.name,selectionReason:'',reviewSummary:'暂无可核实的本店评价。'}:{})};
   }
   async function run(store) {
