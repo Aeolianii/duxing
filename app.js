@@ -200,7 +200,7 @@ document.addEventListener('input',e=>{const t=e.target;if(t.dataset.key!=='usern
 
 // Main hub: food is available, the other entries explain their current status.
 function homeIllustration(kind){
-  return `<img src="assets/${kind}.png" alt="" aria-hidden="true" decoding="async">`;
+  return `<img src="assets/${kind}.webp" alt="" aria-hidden="true" decoding="async">`;
 }
 
 function renderHome(){

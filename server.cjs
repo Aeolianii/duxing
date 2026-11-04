@@ -1,6 +1,7 @@
 const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
+const {createHash} = require('node:crypto');
 const {createResearch} = require('./ai-service.cjs');
 
 function loadConfig(root = __dirname) {
@@ -16,8 +17,8 @@ function loadConfig(root = __dirname) {
 
 function createServer({config = loadConfig(), fetcher = fetch} = {}) {
   const research=createResearch({config,fetcher}),optionResearch=createResearch({config,fetcher,allowOptions:true});
-  const files = new Set(['index.html', 'style.css', 'app.js', 'core.js', 'amap-client.js', 'map-ui.js', 'discovery.js', 'ai-client.js', 'freewheel.js','travel-core.js','travel.js', 'assets/food.png', 'assets/play.png', 'assets/travel.png', 'assets/custom.png']);
-  const types = {'.html':'text/html; charset=utf-8', '.js':'application/javascript; charset=utf-8', '.css':'text/css; charset=utf-8', '.png':'image/png'};
+  const files = new Set(['index.html', 'style.css', 'app.js', 'core.js', 'amap-client.js', 'map-ui.js', 'discovery.js', 'ai-client.js', 'freewheel.js','travel-core.js','travel.js', 'assets/food.webp', 'assets/play.webp', 'assets/travel.webp', 'assets/custom.webp']);
+  const types = {'.html':'text/html; charset=utf-8', '.js':'application/javascript; charset=utf-8', '.css':'text/css; charset=utf-8', '.webp':'image/webp'};
   return http.createServer(async (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
     res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -72,6 +73,13 @@ function createServer({config = loadConfig(), fetcher = fetch} = {}) {
     if (!files.has(name)) return json(404, {error:'Not found'});
     fs.readFile(path.join(__dirname, name), (error, body) => {
       if (error) return json(404, {error:'Not found'});
+      // Revalidate code on every visit; illustrations may be reused for an hour.
+      // Content hashes also detect edits made within the same filesystem timestamp.
+      const etag = '"'+createHash('sha256').update(body).digest('hex').slice(0,24)+'"';
+      res.setHeader('Cache-Control', name.startsWith('assets/') ? 'public, max-age=3600' : 'public, max-age=0, must-revalidate');
+      res.setHeader('ETag', etag);
+      const tags=(req.headers['if-none-match'] || '').split(',').map(value=>value.trim().replace(/^W\//,''));
+      if(tags.includes(etag)||tags.includes('*')) {res.writeHead(304);return res.end();}
       res.writeHead(200, {'Content-Type':types[path.extname(name)]});
       res.end(body);
     });

@@ -10,7 +10,7 @@ destination=root.parent/'都行-demo原型.zip'
 with zipfile.ZipFile(destination,'w',zipfile.ZIP_DEFLATED) as bundle:
     for name in files: bundle.write(root/name,'demo/'+name)
     for name in ['food','play','travel','custom']:
-        bundle.write(root/'assets'/(name+'.png'),'demo/assets/'+name+'.png')
+        bundle.write(root/'assets'/(name+'.webp'),'demo/assets/'+name+'.webp')
     for file in (root/'screenshots').iterdir():
         if file.suffix in ['.jpg','.png']: bundle.write(file,'demo/screenshots/'+file.name)
 print('Packaged demo; local credentials excluded.')
