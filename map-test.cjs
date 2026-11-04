@@ -23,6 +23,30 @@ test('真实路线时间和未知营业必须满足全部限制',()=>{
   assert.equal(adapter.eligible({price:null},{...cfg,unknownPrice:true},[10],[15]),true);
   assert.equal(adapter.eligible({price:45},{...cfg,open:true},[10],[15]),false);
   assert.equal(adapter.eligible({price:45},{...cfg,open:true,unknownHours:true},[10],[15]),true);
+  assert.equal(adapter.eligible({price:45},{...cfg,open:true},[10],[15],true),true);
+  assert.equal(adapter.eligible({price:45},{...cfg,open:true},[10],[15],false),false);
+  assert.equal(adapter.eligible({price:45},{...cfg,open:true},[10],[15],null),false);
+  assert.equal(adapter.eligible({price:45},{...cfg,open:true,unknownHours:true},[10],[15],null),true);
+});
+test('高德营业时段解析：分段、跨夜、24 小时与按星期规则',()=>{
+  const wednesday=new Date(2026,10,4,12,0,0),saturday=new Date(2026,10,7,12,0,0);
+  const lunch=adapter.normalize({id:'A',name:'餐厅',location:'113,23',open_time:'11:00-14:30 17:00-22:00',opentime2:'周一至周日 11:00-14:30,17:00-22:00 2026-02-17至2026-02-23 周一至周日 11:00-21:30'},wednesday);
+  assert.deepEqual(lunch.hours,[[660,870],[1020,1320]]);
+  assert.equal(lunch.hoursText,'11:00-14:30、17:00-22:00');
+  const overnight=adapter.normalize({id:'B',name:'酒吧',location:'113,23',open_time:'17:00-02:00',opentime2:'周一至周日 17:00-02:00'},wednesday);
+  assert.deepEqual(overnight.hours,[[1020,120]]);
+  assert.equal(core.openAt(overnight.hours,60),true);assert.equal(core.openAt(overnight.hours,600),false);
+  assert.deepEqual(adapter.normalize({id:'C',location:'113,23',open_time:'24小时营业'},wednesday).hours,[[0,1440]]);
+  const weekdayRule='周一至周五 11:00-14:00,17:00-24:00；周六至周日 11:00-14:30,17:00-24:00';
+  const workday=adapter.normalize({id:'D',location:'113,23',opentime2:weekdayRule},wednesday);
+  assert.deepEqual(workday.hours,[[660,840],[1020,1440]]);
+  const weekend=adapter.normalize({id:'E',location:'113,23',opentime2:weekdayRule},saturday);
+  assert.deepEqual(weekend.hours,[[660,870],[1020,1440]]);
+  const unknown=adapter.normalize({id:'F',location:'113,23'},wednesday);
+  assert.equal(unknown.hours,null);assert.equal(unknown.hoursText,'');
+  assert.equal(core.openAt(lunch.hours,700),true);assert.equal(core.openAt(lunch.hours,900),false);
+  const merged=adapter.mergeDetails({id:'amap-A',poiId:'A',name:'别名'},{id:'A',open_time:'11:00-22:00'});
+  assert.deepEqual(merged.hours,[[660,1320]]);assert.equal(merged.hoursText,'11:00-22:00');
 });
 test('SDK 回调处理失败、无数据与超时',async()=>{
   assert.equal(await adapter.call(done=>done('no_data')),null);
@@ -65,6 +89,13 @@ test('菜系映射区分西餐、东南亚与烧烤，不能把地方菜当烧�
   assert.equal(adapter.matchesCuisine({name:'喜茶(广场店)',category:'餐饮服务'},['奶茶']),true);
   assert.equal(adapter.matchesCuisine({name:'家常菜',category:'中餐厅'},['奶茶']),false);
 });
+test('JS API 2.0 不返回 typecode 时保留已按类型检索的结果',()=>{
+  assert.equal(adapter.matchesCuisine({typecode:'',category:'餐饮服务;中餐厅;中餐厅',name:'某餐厅'},['中餐']),true);
+  assert.equal(adapter.matchesCuisine({typecode:'',category:'餐饮服务;中餐厅;火锅店',name:'某火锅'},['火锅']),true);
+  assert.equal(adapter.matchesCuisine({typecode:'',category:'餐饮服务;外国餐厅;西餐厅(综合风味)',name:'某西餐厅'},['西餐']),true);
+  assert.equal(adapter.matchesCuisine({name:'小院烧烤',category:'餐饮服务'},['烧烤']),true);
+  assert.equal(adapter.matchesCuisine({name:'家常菜',category:'餐饮服务'},['奶茶']),false);
+});
 test('游玩分类按类型或名称匹配，不能把写字楼当电影院',()=>{
   assert.equal(adapter.matchesPlay({name:'金逸空中电影城',category:'体育休闲服务;影剧院;电影院'},['看电影']),true);
   assert.equal(adapter.matchesPlay({name:'天德荟商务公馆',category:'商务住宅;楼宇;商务写字楼'},['看电影']),false);
@@ -74,6 +105,26 @@ test('游玩分类按类型或名称匹配，不能把写字楼当电影院',()=
   assert.equal(adapter.matchesPlay({name:'声音共和Livehouse',category:'体育休闲服务;娱乐场所;酒吧'},['酒吧']),true);
   assert.equal(adapter.matchesPlay({name:'广州塔剧场',category:'体育休闲服务;影剧院;剧场'},['看演出']),true);
   assert.equal(adapter.matchesPlay({name:'随便一家小店',category:'餐饮服务'},[]),true);
+});
+test('景点类游玩分类：景点、博物馆、美术馆与公园',()=>{
+  const museum={name:'广东省博物馆',category:'科教文化服务;博物馆;博物馆'};
+  const artMuseum={name:'广东美术馆(二沙岛馆区)',category:'科教文化服务;美术馆;美术馆'};
+  const park={name:'越秀公园',category:'风景名胜;公园广场;公园'};
+  const tower={name:'广州塔',category:'风景名胜;风景名胜;国家级景点'};
+  const expo={name:'广州塔帷幕开啦蜡像馆',category:'科教文化服务;展览馆;展览馆'};
+  assert.equal(adapter.matchesPlay(museum,['博物馆']),true);
+  assert.equal(adapter.matchesPlay(expo,['博物馆']),true);
+  assert.equal(adapter.matchesPlay(artMuseum,['美术馆']),true);
+  assert.equal(adapter.matchesPlay(park,['公园']),true);
+  assert.equal(adapter.matchesPlay(tower,['景点']),true);
+  assert.equal(adapter.matchesPlay({name:'天德荟商务公馆',category:'商务住宅;楼宇;商务写字楼'},['景点']),false);
+  assert.equal(adapter.matchesPlay({name:'广东省博物馆',category:'科教文化服务;博物馆;博物馆'},['酒吧']),false);
+  for(const label of ['景点','博物馆','美术馆','公园'])assert.ok(adapter.playTypes.includes(label),'缺少游玩分类 '+label);
+  assert.equal(adapter.playEmoji(museum),'🏛️');
+  assert.equal(adapter.playEmoji(artMuseum),'🖼️');
+  assert.equal(adapter.playEmoji(park),'🌳');
+  assert.equal(adapter.playEmoji(tower),'🗺️');
+  assert.equal(adapter.playEmoji({name:'金逸空中电影城',category:'体育休闲服务;影剧院;电影院'}),'🎬');
 });
 test('游玩附近搜索逐个分类请求，只保留匹配场馆并带场馆表情',async()=>{
   const calls=[];
@@ -145,6 +196,28 @@ test('取消生成后旧请求不会跳回转盘，无结果留在地图',async(
   assert.equal(h.state.stage,'map');assert.equal(h.state.loading,false);assert.equal(h.state.candidates.length,0);
   const empty=harness({nearby:async()=>[]});await empty.refreshCandidates();assert.equal(empty.state.stage,'map');
 });
+test('真实模式严格营业筛选使用解析出的营业时段，未知时段仍按设置处理',async()=>{
+  const fixed=new Date(2026,10,4,12,0,0);
+  class FixedDate extends Date{constructor(...args){super(...(args.length?args:[+fixed]));}static now(){return +fixed;}}
+  const h=harness({nearby:async()=>[
+    {id:'always',source:'amap',location:[113,23],price:30,hours:[[0,1440]],hoursText:'24 小时营业'},
+    {id:'lunch',source:'amap',location:[113,23],price:30,hours:[[660,870]],hoursText:'11:00-14:30'},
+    {id:'closed',source:'amap',location:[113,23],price:30,hours:[[100,120]],hoursText:'01:40-02:00'},
+    {id:'unknown',source:'amap',location:[113,23],price:30,hours:null,hoursText:''}
+  ],route:async()=>10});
+  h.Date=FixedDate;
+  h.state.config={mode:'步行',limit:15,budget:0,types:[],count:6,activity:'food',open:true,unknownHours:false};
+  await h.refreshCandidates();
+  assert.deepEqual(Array.from(h.state.candidates,s=>s.id).sort(),['always','lunch']);
+  assert.ok(h.state.candidates.every(s=>s.opening===true));
+
+  const loose=harness({nearby:async()=>[{id:'unknown',source:'amap',location:[113,23],price:30,hours:null}],route:async()=>10});
+  loose.Date=FixedDate;
+  loose.state.config={mode:'步行',limit:15,budget:0,types:[],count:6,activity:'food',open:true,unknownHours:false};
+  await loose.refreshCandidates();
+  assert.equal(loose.state.candidates.length,0);
+  assert.match(loose.state.searchMessage,/营业时间未知/);
+});
 test('公平集合按真实多起点耗时排序且排除超时店',async()=>{
   const h=harness({nearby:async()=>[1,2,3].map(n=>({id:'store'+n,location:[n,23],price:30})),route:async(from,to)=>({1:[10,30],2:[20,20],3:[10,40]}[to[0]][from[0]-1])});
   h.state.page='fair';h.state.people=[{origin:{location:[1,23]},mode:'步行',limit:30},{origin:{location:[2,23]},mode:'驾车',limit:30}];
@@ -184,6 +257,19 @@ test('详情空值保留已有评分、人均和图片，有效新值正常更�
   assert.equal(kept.rating,4.6);assert.equal(kept.price,80);assert.deepEqual(kept.photos,old.photos);assert.equal(kept.phone,'123');assert.equal(kept.name,'别名');assert.deepEqual(kept.location,old.location);
   const updated=adapter.mergeDetails(old,{id:'A',biz_ext:{rating:'4.8',cost:'95'}});
   assert.equal(updated.rating,4.8);assert.equal(updated.price,95);
+  const topLevel=adapter.mergeDetails(old,{id:'A',rating:'4.9',cost:'70.00'});
+  assert.equal(topLevel.rating,4.9);assert.equal(topLevel.price,70);
+});
+
+test('JS API 2.0 顶层 rating/cost 会保留，biz_ext 旧结构与空值仍兼容',()=>{
+  const live=adapter.normalize({id:'B1',name:'餐厅',location:'113.32,23.10',rating:'4.6',cost:'88.00',open_time:'11:00-22:00'});
+  assert.equal(live.rating,4.6);assert.equal(live.price,88);assert.deepEqual(live.hours,[[660,1320]]);assert.equal(live.hoursText,'11:00-22:00');
+  const legacy=adapter.normalize({id:'B2',name:'餐厅',location:'113.32,23.10',biz_ext:{rating:'4.2',cost:'58'}});
+  assert.equal(legacy.rating,4.2);assert.equal(legacy.price,58);
+  const topWins=adapter.normalize({id:'B3',name:'餐厅',location:'113.32,23.10',rating:'4.7',cost:'60',biz_ext:{rating:'4.0',cost:'50'}});
+  assert.equal(topWins.rating,4.7);assert.equal(topWins.price,60);
+  const empty=adapter.normalize({id:'B4',name:'餐厅',location:'113.32,23.10',rating:'',cost:'0.00',biz_ext:{rating:'',cost:''}});
+  assert.equal(empty.rating,null);assert.equal(empty.price,null);
 });
 
 test('资料层及缓存的空值不覆盖调用方已有商业数据',async()=>{
@@ -258,7 +344,7 @@ test('真实路线缓存忽略时间上限但区分出行方式，强制刷新�
 
 test('美食多菜系串行查询，单分类失败保留其他结果并支持补查第二页',async()=>{
   let active=0,peak=0;const calls=[];
-  const AMap={plugin(_n,done){done();},PlaceSearch:class{constructor(options){this.options=options;}searchNearBy(_q,_p,_r,done){calls.push(this.options);active++;peak=Math.max(peak,active);setTimeout(()=>{active--;if(this.options.type==='050203')done('error',{info:'CUQPS_HAS_EXCEEDED_THE_LIMIT'});else done('complete',{poiList:{pois:[{id:'food',name:'餐厅',location:'113,23',typecode:'050202',type:'餐饮服务'}]}});},1);}}};
+  const AMap={plugin(_n,done){done();},PlaceSearch:class{constructor(options){this.options=options;}searchNearBy(_q,_p,_r,done){calls.push(this.options);active++;peak=Math.max(peak,active);setTimeout(()=>{active--;if(this.options.type==='050203')done('error',{info:'CUQPS_HAS_EXCEEDED_THE_LIMIT'});else done('complete',{poiList:{pois:[{id:'food',name:'餐厅',location:'113,23',type:'餐饮服务;中餐厅;中餐厅'}]}});},1);}}};
   const context={window:{AMap},location:{origin:'http://localhost'},document:{createElement:()=>({remove(){}}),head:{append(script){script.onload();}}},fetch:async()=>({ok:true,json:async()=>({configured:true,key:'test'})}),AbortSignal,setTimeout:(f,ms)=>setTimeout(f,ms===12000?ms:0),clearTimeout};
   vm.createContext(context);vm.runInContext(fs.readFileSync(__dirname+'/amap-client.js','utf8'),context);
   const result=await context.window.DouxMap.nearby([113,23],{types:['日料','韩餐'],mode:'步行',limit:30,pageIndex:2});

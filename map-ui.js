@@ -2,6 +2,10 @@
 // Compact phone UI and the real-map workflow share the existing roulette state.
 const mapUI={map:null,marker:null,token:0,searchToken:0,draft:null,target:null,results:[]};
 state.live=false;state.mapConfigured=false;state.catalog={};state.request=0;state.checkingMap=true;
+// Captured once at load so tests can freeze Date.now() without breaking the
+// arrival-time check for opening hours.
+const LOCAL_OFFSET_MINUTES=-new Date().getTimezoneOffset();
+function localMinuteOfDay(){return Math.floor((Date.now()+LOCAL_OFFSET_MINUTES*60000)/60000)%1440;}
 
 function disposeMap(){mapUI.token++;mapUI.searchToken++;mapUI.map?.destroy();mapUI.map=null;mapUI.marker=null;}
 function openFilters(){showModal(modalTop((state.activity==='play')?'🎡 这一次，想怎么玩？':'🍋 这一顿，想怎么吃？')+settings());}
@@ -94,7 +98,9 @@ async function refreshCandidates(){
       async function worker(){while(cursor<pool.length&&active()&&matches.length<config.count){
         const store=pool[cursor++];
         if(config.budget&&(store.price==null?!config.unknownPrice:store.price>config.budget)){budgetRejected++;checked++;continue;}
-        if(config.open&&!config.unknownHours){hoursRejected++;checked++;continue;}
+        // Without usable opening hours the arrival check is impossible; skip the
+        // route queries only for those stores when the strict filter is on.
+        if(config.open&&!config.unknownHours&&!(Array.isArray(store.hours)&&store.hours.length)){hoursRejected++;checked++;continue;}
         try{
           const times=Array(origins.length).fill(null);
           const order=origins.map((origin,index)=>({origin,index,score:meetingDistance(origin.location,store.location)/meetingReach(origin)})).sort((a,b)=>b.score-a.score);
@@ -107,14 +113,15 @@ async function refreshCandidates(){
             if(minutes>origin.limit){routeRejected++;break;}
           }
           completed++;
-          if(DouxMap.eligible(store,config,times,origins.map(p=>p.limit))){
-            matches.push({...store,times,max:Math.max(...times),gap:Math.max(...times)-Math.min(...times),sum:times.reduce((a,b)=>a+b,0),opening:null,routeMode:fair?'多人最长路程':config.mode,routeKey:routeContext(store).key,routeCheckedAt:Date.now(),routeStatus:'ready'});
+          const arrival=(localMinuteOfDay()+Math.max(...times))%1440;
+          const opening=times.every(Number.isFinite)&&Array.isArray(store.hours)&&store.hours.length?Doux.openAt(store.hours,arrival):null;
+          if(DouxMap.eligible(store,config,times,origins.map(p=>p.limit),opening)){
+            matches.push({...store,times,max:Math.max(...times),gap:Math.max(...times)-Math.min(...times),sum:times.reduce((a,b)=>a+b,0),opening,routeMode:fair?'多人最长路程':config.mode,routeKey:routeContext(store).key,routeCheckedAt:Date.now(),routeStatus:'ready'});
           }
         }catch{failures++;}
         checked++;if(token===state.request)updateProgress(Math.min(95,20+Math.round(70*checked/Math.max(1,seen.size))),'正在核对每个人的路线…',`已检查 ${checked} 家，符合条件 ${matches.length} 家`);
       }}
       await Promise.all([worker(),worker()]);
-      if(config.open&&!config.unknownHours)break;
     }
     if(token!==state.request)return;
     state.candidates=(fair?matches.sort(Doux.fairSort):Doux.shuffle(matches)).slice(0,config.count);
@@ -187,7 +194,7 @@ async function prepareMerchantDetails(store,delay){
       (async()=>{try{
         const details=await DouxMap.details(store);
         // Only merge merchant details; a shared request must not overwrite a newer route or display name.
-        for(const field of ['photos','phone','rating','price','hours','category']){
+        for(const field of ['photos','phone','rating','price','hours','hoursText','category']){
           const value=details[field];
           if(value!=null&&value!==''&&(!Array.isArray(value)||value.length))result[field]=value;
         }
@@ -201,7 +208,7 @@ async function prepareMerchantDetails(store,delay){
   Object.assign(store,await task);
   if(['ready','empty'].includes(store.ai?.status)){
     if(detailCache.size>=200)detailCache.delete(detailCache.keys().next().value);
-    const fields=['photos','phone','rating','price','hours','category','detailError','ai'];
+    const fields=['photos','phone','rating','price','hours','hoursText','category','detailError','ai'];
     detailCache.set(key,Object.fromEntries(fields.filter(k=>store[k]!=null&&store[k]!==''&&(!Array.isArray(store[k])||store[k].length)).map(k=>[k,store[k]])));
   }
   if(state.candidates?.some(s=>s.id===store.id))state.catalog[store.id]=store;

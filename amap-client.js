@@ -7,13 +7,80 @@
     const pair = parts.map(Number);
     return pair.length === 2 && pair.every(Number.isFinite) && Math.abs(pair[0]) <= 180 && Math.abs(pair[1]) <= 90 ? pair : null;
   }
-  function normalize(poi) {
+  const WEEKDAYS = {'一':1,'二':2,'三':3,'四':4,'五':5,'六':6,'日':0,'天':0};
+  const pad2 = value => String(value).padStart(2, '0');
+  const clockMinute = (hour, minute) => hour >= 0 && hour <= 24 && minute >= 0 && minute < 60 && !(hour === 24 && minute !== 0) ? hour * 60 + minute : null;
+  function clockText(minute) {
+    return minute === 1440 ? '24:00' : pad2(Math.floor(minute / 60)) + ':' + pad2(minute % 60);
+  }
+  function hourIntervals(value) {
+    const found = new Map();
+    for (const match of value.matchAll(/(\d{1,2})\s*[:：]\s*(\d{2})\s*[-~至到—－]\s*(\d{1,2})\s*[:：]\s*(\d{2})/g)) {
+      const from = clockMinute(+match[1], +match[2]), to = clockMinute(+match[3], +match[4]);
+      if (from != null && to != null && from !== to) found.set(from + '-' + to, [from, to]);
+    }
+    return [...found.values()].sort((a, b) => a[0] - b[0]);
+  }
+  function hourText(intervals) {
+    if (intervals.length === 1 && intervals[0][0] === 0 && intervals[0][1] === 1440) return '24 小时营业';
+    return intervals.map(([from, to]) => clockText(from) + '-' + clockText(to)).join('、');
+  }
+  function dayStart(date) { return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime(); }
+  function datePoint(value, year) {
+    const parts = value.split('-').map(Number);
+    return parts.length === 3 ? new Date(parts[0], parts[1] - 1, parts[2]).getTime() : new Date(year, parts[0] - 1, parts[1]).getTime();
+  }
+  function withinDates(now, from, to) {
+    const year = now.getFullYear(), today = dayStart(now), start = datePoint(from, year), end = datePoint(to, year);
+    return start <= end ? today >= start && today <= end : today >= start || today <= end;
+  }
+  function weekdayMatch(now, range) {
+    const match = /^周([一二三四五六日天])(?:至周([一二三四五六日天]))?$/.exec(range);
+    if (!match) return false;
+    const from = WEEKDAYS[match[1]], to = WEEKDAYS[match[2] || match[1]], day = now.getDay();
+    return from <= to ? day >= from && day <= to : day >= from || day <= to;
+  }
+  function weekdayHours(value, now) {
+    const pattern = /(?:(\d{4}-\d{2}-\d{2}|\d{1,2}-\d{1,2})\s*至\s*(\d{4}-\d{2}-\d{2}|\d{1,2}-\d{1,2})\s*)?(周[一二三四五六日天](?:\s*至\s*周[一二三四五六日天])?)[，,、；;：:\s]*((?:\d{1,2}\s*[:：]\s*\d{2}\s*[-~至到—－]\s*\d{1,2}\s*[:：]\s*\d{2}[，,、；;\s]*)+)/g;
+    for (const match of value.matchAll(pattern)) {
+      if (match[1] && match[2] && !withinDates(now, match[1], match[2])) continue;
+      if (!weekdayMatch(now, match[3].replace(/\s+/g, ''))) continue;
+      const intervals = hourIntervals(match[4]);
+      if (intervals.length) return intervals;
+    }
+    return null;
+  }
+  // open_time is AMap's short summary; opentime2 adds weekday and special-date
+  // rules. Prefer the weekday rule that applies today and ignore holiday ranges,
+  // so a special-period interval never counts as the normal opening hours.
+  function parseHours(poi, now = new Date()) {
+    const sources = [text(poi.opentime2), text(poi.open_time)];
+    for (const value of sources) {
+      if (!value) continue;
+      if (/24\s*小时|全天营业|24h/i.test(value)) return {intervals: [[0, 1440]], text: '24 小时营业'};
+      const weekday = weekdayHours(value, now);
+      if (weekday) return {intervals: weekday, text: hourText(weekday)};
+    }
+    for (const value of sources) {
+      if (!value) continue;
+      const intervals = hourIntervals(value);
+      if (intervals.length) return {intervals, text: hourText(intervals)};
+    }
+    return null;
+  }
+  function normalize(poi, now = new Date()) {
+    const at = now instanceof Date ? now : new Date();
     const number = v => v !== '' && v != null && !Array.isArray(v) && Number.isFinite(Number(v)) && Number(v) > 0 ? Number(v) : null;
     const photos = (Array.isArray(poi.photos) ? poi.photos : []).map(p => text(p.url)).filter(u => /^https:\/\//i.test(u));
+    // JS API 2.0 puts rating/cost at the top level of a POI; older SDK and REST
+    // payloads nest them in biz_ext. Read the top-level value first, then fall back.
+    const rating = number(poi.rating) ?? number(poi.biz_ext?.rating);
+    const price = number(poi.cost) ?? number(poi.biz_ext?.cost);
+    const hours = parseHours(poi, at);
     return {id:'amap-'+poi.id, poiId:poi.id, source:'amap', name:text(poi.name), location:coordinates(poi.location),
       type:text(poi.type).split(';').filter(Boolean).pop() || '餐饮', category:text(poi.type), typecode:text(poi.typecode),
-      city:text(poi.cityname)||text(poi.citycode),address:[text(poi.cityname),text(poi.adname),text(poi.address)].join(''), price:number(poi.biz_ext?.cost),
-      rating:number(poi.biz_ext?.rating), phone:text(poi.tel), photos, hours:null, emoji:'🍽️', color:'#e7f5ef'};
+      city:text(poi.cityname)||text(poi.citycode),address:[text(poi.cityname),text(poi.adname),text(poi.address)].join(''), price,
+      rating, phone:text(poi.tel), photos, hours:hours?hours.intervals:null, hoursText:hours?hours.text:(text(poi.open_time)||text(poi.opentime2)), emoji:'🍽️', color:'#e7f5ef'};
   }
   function routeMinutes(result) {
     const time = result?.routes?.[0]?.time;
@@ -33,10 +100,12 @@
     const plans=(result?.plans||[]).filter(p=>Number.isFinite(p.time)&&p.time>=0&&!p.segments?.some(s=>['TAXI','RAILWAY'].includes(s.transit_mode)));
     return plans.length?Math.ceil(Math.min(...plans.map(p=>p.time))/60):null;
   }
-  function eligible(store, config, times, limits) {
+  // opening is the result of checking parsed hours against the expected arrival
+  // time: true, false, or null when AMap gave no usable opening hours.
+  function eligible(store, config, times, limits, opening) {
     return times.length === limits.length && times.every((time, i) => Number.isFinite(time) && time <= limits[i]) &&
       (!config.budget || (store.price == null ? !!config.unknownPrice : store.price <= config.budget)) &&
-      (!config.open || !!config.unknownHours);
+      (!config.open || (opening == null ? !!config.unknownHours : !!opening));
   }
   function call(start, timeout = 12000) {
     return new Promise((resolve, reject) => {
@@ -92,14 +161,24 @@
     return selected.some(label => {
       const query=cuisineQueries[label];if(!query)return false;
       if(query.keyword)return query.keyword.split('|').some(word=>(store.name+';'+store.category).includes(word));
+      // JS API 2.0 no longer returns typecode. The nearby search was already
+      // restricted to this type code, so keep the result instead of dropping it.
+      if(!text(store.typecode))return true;
       return query.type.split('|').some(code=>String(store.typecode).startsWith(code.endsWith('00')?code.slice(0,4):code));
     });
   }
-  // Entertainment venues: AMap has dedicated codes for cinemas, KTV and bars;
-  // escape rooms and script-killing rooms share the generic leisure type, so
-  // those rely on keyword search plus a name match.
+  // Venues and attractions. Type codes verified against live AMap results:
+  // 110000 风景名胜 (含公园广场/旅游景点/国家级景点/观景点), 110101 公园,
+  // 140100 博物馆, 140200 展览馆, 140400 美术馆. Type queries are pre-filtered by
+  // AMap, so matchesPlay only needs a light category keyword sanity check.
+  // Escape rooms, script-killing rooms and board-game bars share the generic
+  // leisure type (080000), so those rely on keyword search plus a name match.
   const playQueries = {
+    '景点':{type:'110000',match:['风景名胜','旅游景点','国家级景点','省级景点','观景点','城市广场','世界遗产','寺庙','道观','教堂','纪念馆','古镇','遗址','观景']},
     '看电影':{type:'080601',match:['电影院']},
+    '博物馆':{type:'140100|140200',match:['博物馆','展览馆','陈列馆','科技馆','天文馆','蜡像','展览','会展']},
+    '美术馆':{type:'140400',match:['美术馆','画廊','艺术中心','艺术馆','当代艺术']},
+    '公园':{type:'110101',match:['公园','植物园','动物园','水族馆']},
     '密室逃脱':{type:'080000',keyword:'密室逃脱|密室|逃脱',nameRe:/密室|逃脱/},
     '剧本杀':{type:'080000',keyword:'剧本杀|剧本|推理',nameRe:/剧本|推理|侦探/},
     '唱K':{type:'080302',match:['KTV']},
@@ -126,6 +205,10 @@
     if (/KTV|卡拉|量贩|歌/i.test(hay)) return '🎤';
     if (/酒吧|酒馆|精酿|livehouse/i.test(hay)) return '🍻';
     if (/剧场|剧院|音乐厅|演出|相声|喜剧/.test(hay)) return '🎭';
+    if (/博物馆|展览馆|蜡像|陈列|科技馆|天文馆/.test(hay)) return '🏛️';
+    if (/美术馆|画廊|艺术中心|艺术馆|当代艺术/.test(hay)) return '🖼️';
+    if (/公园|植物园|动物园|水族馆/.test(hay)) return '🌳';
+    if (/景点|风景|景区|古镇|遗址|寺庙|道观|教堂|广场|塔/.test(hay)) return '🗺️';
     return '🎡';
   }
   const playColors = ['#ffe0ec','#e2f0ff','#e8e2ff','#dff3e6','#fff0cf','#f6e3ff'];
@@ -136,7 +219,7 @@
     const A = await load();
     const searcher = new A.PlaceSearch({pageSize:8,extensions:'all'});
     const result = await call(done => center ? searcher.searchNearBy(query, center, 20000, done) : searcher.search(query, done));
-    return (result?.poiList?.pois || []).map(normalize).filter(p => p.location);
+    return (result?.poiList?.pois || []).map(poi=>normalize(poi)).filter(p => p.location);
   }
   async function nearby(origin, config) {
     const A = await load();
@@ -150,7 +233,7 @@
       const groups = [];
       for (const [label, query] of list) {
         const result = await call(done => new A.PlaceSearch({type:query.type,pageSize:20,extensions:'all'}).searchNearBy(query.keyword||'',origin,radius,done));
-        groups.push((result?.poiList?.pois||[]).map(normalize).filter(p => p.location && matchesPlay(p, [label])));
+        groups.push((result?.poiList?.pois||[]).map(poi=>normalize(poi)).filter(p => p.location && matchesPlay(p, [label])));
         if (list.length > 1) await new Promise(resolve => setTimeout(resolve, 420));
       }
       const unique = new Map();
@@ -160,14 +243,14 @@
       }
       return [...unique.values()];
     }
-    const queries=config.types.length?config.types.map(t=>cuisineQueries[t]).filter(Boolean):[{type:'050000'}];
+    const queries=config.types.length?config.types.map(label=>[label,cuisineQueries[label]]).filter(pair=>pair[1]):[[null,{type:'050000'}]];
     const groups=[];let lastError;
-    for(const query of queries){
+    for(const [label,query] of queries){
       if(config.cancelled?.())break;
       try{
         await waitRouteSlot('place');
         const result=await call(done=>new A.PlaceSearch({type:query.type,pageSize:20,pageIndex:config.pageIndex||1,extensions:'all'}).searchNearBy(query.keyword||'',origin,radius,done));
-        groups.push((result?.poiList?.pois||[]).map(normalize).filter(p=>p.location&&matchesCuisine(p,config.types)));
+        groups.push((result?.poiList?.pois||[]).map(poi=>normalize(poi)).filter(p=>p.location&&matchesCuisine(p,label?[label]:[])));
       }catch(error){lastError=error;}
     }
     if(!groups.length&&lastError)throw lastError;
@@ -244,6 +327,6 @@
     if(!point) throw new Error('未获取到定位，请在地图上手动选点');
     return {location:point,name:result.formattedAddress || '我的位置'};
   }
-  const api={coordinates,normalize,mergeDetails,routeMinutes,transitMinutes,cityAt,eligible,matchesCuisine,matchesPlay,playQueries,playTypes:Object.keys(playQueries),decoratePlay,playEmoji,call,load,search,nearby,route,details,locate};
+  const api={coordinates,normalize,parseHours,mergeDetails,routeMinutes,transitMinutes,cityAt,eligible,matchesCuisine,matchesPlay,playQueries,playTypes:Object.keys(playQueries),decoratePlay,playEmoji,call,load,search,nearby,route,details,locate};
   if(typeof module!=='undefined') module.exports=api; else root.DouxMap=api;
 })(typeof window!=='undefined'?window:globalThis);
