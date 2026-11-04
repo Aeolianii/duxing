@@ -94,6 +94,7 @@ function renderTravelLibrary(){
 function saveTravelPlan(){const p=travel.plan,copy=travelClone(p);copy.savedAt=new Date().toISOString();const old=travel.plans;travel.plans=old.some(x=>x.id===p.id)?old.map(x=>x.id===p.id?copy:x):[copy,...old];const wasDirty=travel.dirty;travel.dirty=false;if(!persistTravel()){travel.plans=old;travel.dirty=wasDirty;return;}p.savedAt=copy.savedAt;toast('行程已保存在这台设备');render();}
 function shareTravelPlan(){const p=travel.plan,city=travelCity(p.cityId),canvas=document.createElement('canvas');canvas.width=900;const lineSets=p.days.map((d,i)=>({title:`第 ${i+1} 天`,text:d.spots.map(s=>s.name).join(' → ')||'自由活动 / 休息'}));const lines=[];for(const d of lineSets){lines.push(d.title);for(let i=0;i<d.text.length;i+=24)lines.push(d.text.slice(i,i+24));lines.push('');}canvas.height=420+lines.length*43;const ctx=canvas.getContext('2d');ctx.fillStyle='#e4f4fc';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.fillStyle='#315d7b';ctx.font='bold 56px Microsoft YaHei, sans-serif';ctx.fillText('下一站，'+city.name,55,95);ctx.font='26px Microsoft YaHei, sans-serif';ctx.fillText(`${p.conditions.date} · ${p.conditions.days} 天 · ${p.conditions.people} 人`,55,155);ctx.fillText(p.conditions.budget?`人均预算 ¥${p.conditions.budget}（计划上限，非报价）`:'预算不限 · 按自己的节奏出发',55,203);ctx.font='28px Microsoft YaHei, sans-serif';lines.forEach((line,i)=>ctx.fillText(line,55,285+i*43));ctx.font='23px Microsoft YaHei, sans-serif';ctx.fillText('旅行草案 · 交通、开放与预约请出发前核实',55,canvas.height-85);ctx.fillText('都行 · 把纠结交给一点好运',55,canvas.height-40);const url=canvas.toDataURL('image/png');showModal(modalTop('旅行分享卡片')+`<img class="share-preview" src="${url}" alt="${esc(city.name)}旅行计划分享卡片"><p class="muted sheet-note">包含出发日期、人数和预算；不含出发城市及准备清单。</p><a class="btn full sheet-note" href="${url}" download="都行-${esc(city.name)}旅行计划.png">下载分享图片</a>`);}
 function handleTravelAction(button){const d=button.dataset;
+  if(d.travelRemovePhoto!==undefined){const form=button.closest('#visitForm');button.closest('.rv-preview-item')?.remove();form?.dispatchEvent(new Event('input',{bubbles:true}));return true;}
   if(d.travelRecord){recordForm(travelRecordStore(d.travelRecord));return true;}
   if(button.id==='travelFootprints'){state.page='visits';state.visitTab='travel';render();return true;}
   if(d.travelStage){if(state.busy)return true;travelGo(d.travelStage);return true;}
@@ -141,6 +142,40 @@ window.addEventListener('beforeunload',event=>{if(travel.dirty&&!persistTravel()
 
 function travelVisitedIds(){return [...new Set([...travel.visited,...(state.visits||[]).filter(v=>v.activity==='travel').map(v=>v.storeId)])];}
 function travelRecordStore(id){const city=travelCity(id);return city?{id:city.id,name:city.name,activity:'travel',emoji:'🧳'}:null;}
-function openTravelVisitPicker(){showModal(modalTop('选择实际去过的城市')+`<select id="travelRecordPick" class="full"><option value="">请选择城市</option>${DouxTravel.cities.map(c=>`<option value="${c.id}">${c.name}</option>`).join('')}</select>`);}
-function travelVisitExtras(){const marked=travel.visited.filter(id=>!state.visits.some(v=>v.activity==='travel'&&v.storeId===id));return `<button class="btn outline full sheet-note" data-travel-stage="library">查看保存的行程</button>${marked.length?'<h2 class="travel-section-title">已标记去过的城市</h2><p class="muted">这些城市尚未填写日期，可补录旅行；城市标记在“我的旅行”中管理。</p><div class="section-list">'+marked.map(id=>`<div class="list-row"><div class="grow"><h3>${esc(travelCity(id).name)}</h3><p>出游日期未填写</p></div><button class="btn secondary small" data-travel-record="${id}">补充记录</button></div>`).join('')+'</div>':''}`;}
+function openTravelVisitPicker(){showModal(modalTop('选择旅行城市')+`<select id="travelRecordPick" class="full"><option value="">请选择城市</option>${DouxTravel.cities.map(c=>`<option value="${c.id}">${c.name}</option>`).join('')}</select>`);}
+function travelVisitExtras(){const marked=travel.visited.filter(id=>!state.visits.some(v=>v.activity==='travel'&&v.storeId===id));return `<button class="btn outline full sheet-note" data-travel-stage="library">查看保存的行程</button>${marked.length?'<h2 class="travel-section-title">已标记去过的城市</h2><p class="muted">这些城市还没有旅行手记，可以补上一句话或旅行照。</p><div class="section-list">'+marked.map(id=>`<div class="list-row"><div class="grow"><h3>${esc(travelCity(id).name)}</h3><p>还没有旅行手记</p></div><button class="btn secondary small" data-travel-record="${id}">补充记录</button></div>`).join('')+'</div>':''}`;}
 document.addEventListener('change',event=>{if(event.target.id==='travelRecordPick'&&event.target.value)recordForm(travelRecordStore(event.target.value));});
+
+// 旅行手记独立于门店评价；照片压缩后仅保存在本机足迹中。
+const travelPhotoWork=new WeakSet();
+const travelRecordPhotos=record=>(Array.isArray(record?.images)?record.images:[]).filter(src=>/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(src)).slice(0,3);
+function travelRecordPhotosHTML(record){return `<div class="travel-visit-photos">${travelRecordPhotos(record).map((src,i)=>`<img src="${esc(src)}" alt="${esc(record.name)}旅行照 ${i+1}" loading="lazy">`).join('')}</div>`;}
+function travelPhotoPreview(src){return `<span class="rv-preview-item"><img data-travel-photo src="${esc(src)}" alt="旅行照预览"><button type="button" data-travel-remove-photo aria-label="移除旅行照">×</button></span>`;}
+function openTravelRecordForm(store,existing){
+  state.bg++;
+  showModal(modalTop(existing?'编辑旅行手记':'记下这次旅行')+`<form id="visitForm" class="record-form" data-store="${esc(store.id)}" data-activity="travel" data-visit="${esc(existing?.id||'')}"><div class="intro-box">${esc(store.name)}</div><label>留一句话<textarea name="note" maxlength="500" rows="3" placeholder="记下旅途中的一个瞬间…">${esc(existing?.note||'')}</textarea></label><div class="rv-photo-actions"><label class="btn outline small rv-upload">＋ 添加旅行照<input id="travelRecordPhotos" type="file" accept="image/jpeg,image/png,image/webp" multiple hidden></label><small>最多 3 张</small></div><div id="travelRecordPreview" class="rv-preview">${travelRecordPhotos(existing).map(travelPhotoPreview).join('')}</div><button class="btn full" type="submit">保存旅行手记</button></form>`);
+}
+function saveTravelRecord(form){
+  if(travelPhotoWork.has(form))return toast('旅行照正在处理，请稍候');
+  const existing=state.visits.find(v=>v.id===form.dataset.visit),store=travelRecordStore(form.dataset.store);
+  if(!store)return toast('请选择旅行城市');
+  const note=String(new FormData(form).get('note')||'').trim().slice(0,500);
+  const images=travelRecordPhotos({images:[...form.querySelectorAll('img[data-travel-photo]')].map(img=>img.getAttribute('src'))});
+  if(!note&&!images.length)return toast('留下一句话或添加旅行照吧');
+  const record={...existing,id:existing?.id||crypto.randomUUID(),storeId:store.id,name:store.name,emoji:store.emoji,activity:'travel',date:existing?.date||today(),note,images};
+  const next=existing?state.visits.map(v=>v.id===record.id?record:v):[...state.visits,record];
+  if(!save('visits',next))return;
+  state.visits=next;state.visitTab='travel';$('#modal').close();render();toast('这次旅行，已经记下了');
+}
+document.addEventListener('change',async event=>{
+  const input=event.target;if(input.id!=='travelRecordPhotos')return;
+  const form=input.closest('#visitForm');if(!form||travelPhotoWork.has(form))return;
+  travelPhotoWork.add(form);
+  try {
+    for(const file of [...(input.files||[])]){
+      if(form.querySelectorAll('img[data-travel-photo]').length>=3){toast('最多 3 张旅行照');break;}
+      try {const src=await window.DouxReviews.compressPhoto(file);if(!form.isConnected)break;form.querySelector('#travelRecordPreview').insertAdjacentHTML('beforeend',travelPhotoPreview(src));form.dispatchEvent(new Event('input',{bubbles:true}));}
+      catch(error){toast(error.message);}
+    }
+  } finally {travelPhotoWork.delete(form);input.value='';}
+});

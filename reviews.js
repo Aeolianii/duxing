@@ -420,7 +420,7 @@
       }
     }
   }
-  root.DouxReviews = {mount, openForm, snapshot, restore, labelFor, hydrateVisits, planButton, renderPlans, TAGS, PHOTO_LIMIT};
+  root.DouxReviews = {mount, openForm, snapshot, restore, labelFor, hydrateVisits, planButton, renderPlans, compressPhoto, TAGS, PHOTO_LIMIT};
   root.addEventListener('storage',event=>{
     if(event.key==='doux-visits'){try{const visits=JSON.parse(event.newValue||'[]');if(Array.isArray(visits))appState().visits=visits;}catch{}}
     if(event.key==='doux-outings-v1'){try{const plans=JSON.parse(event.newValue||'[]');if(Array.isArray(plans))appState().outings=plans;}catch{}}
