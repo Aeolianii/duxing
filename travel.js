@@ -37,7 +37,7 @@ async function researchTravel(city,round){
 }
 function travelKnowledge(){const info=travel.info;
   if(info?.status==='loading')return '<p role="status">正在查这座城的资料，你也可以先规划行程…</p>';
-  if(info?.status==='ready')return `<p>${esc(info.introduction)}</p><details><summary>资料来源与查询时间</summary><p>AI 根据搜索摘要整理；仅作旅行灵感，季节信息请核对适用时间。查询于 ${esc(new Date(info.retrievedAt).toLocaleString('zh-CN'))}</p>${(info.evidence||[]).filter(s=>/^https?:\/\//.test(s.url)).map(s=>`<a href="${esc(s.url)}" target="_blank" rel="noopener noreferrer">${esc(s.title||'查看来源')}</a>`).join('')}</details>`;
+  if(info?.status==='ready')return `<p>${esc(info.introduction)}</p><details><summary>资料来源与查询时间</summary><p>AI 根据搜索摘要整理；仅作旅行灵感，季节信息请核对适用时间。查询于 ${esc(new Date(info.retrievedAt).toLocaleString('zh-CN'))}</p>${(info.evidence||[]).filter(s=>/^https?:\/\//.test(s.url)).map(s=>`<a href="${esc(s.url)}" target="_blank" rel="noopener noreferrer">${esc(s.title||'查看来源')}</a>${typeof s.quote==='string'&&s.quote?`<small class="muted">原文：${esc(s.quote.slice(0,120))}</small>`:''}`).join('')}</details>`;
   return `<p>${esc(info?.error||'暂无可靠的联网介绍，先参考本地旅行灵感。')}</p><button class="btn secondary small" id="travelRetry">重新检索</button>`;
 }
 function showTravelResult(){const city=travel.last;if(!city)return;

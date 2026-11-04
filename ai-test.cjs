@@ -5,7 +5,10 @@ const {createClient}=require('./ai-client.js');
 const {createServer}=require('./server.cjs');
 const store={id:'amap-A',source:'amap',poiId:'A',name:'测试餐厅(南门店)',city:'广州市',address:'广州市南门路1号',category:'粤菜'};
 const source={title:store.name,url:'https://example.com/branch-a',summary:'测试餐厅(南门店)位于广州市南门路1号，主营粤菜。'};
-const model={matched:true,introduction:'这是一家粤菜餐厅。',selectionReason:'这家南门店主营粤菜，如果今天想尝试粤菜，可以把它作为这次用餐的一个选择。',reviewSummary:'暂无评价。',citations:[{index:0,quote:'主营粤菜'}]};
+const model={matched:true,introduction:'这是一家粤菜餐厅。',selectionReason:'这家南门店主营粤菜，如果今天想尝试粤菜，可以把它作为这次用餐的一个选择。',reviewSummary:'暂无评价。',citations:[
+  {index:0,quote:'主营粤菜',sentence:'这是一家粤菜餐厅。'},
+  {index:0,quote:'主营粤菜',sentence:'这家南门店主营粤菜，如果今天想尝试粤菜，可以把它作为这次用餐的一个选择。'}
+]};
 const json=value=>new Response(JSON.stringify(value),{headers:{'Content-Type':'application/json'}});
 const completion=value=>json({choices:[{finish_reason:'stop',message:{content:JSON.stringify(value)}}]});
 const isSourceReview=body=>body.messages[0].content.startsWith('你只负责审核搜索来源');
@@ -47,10 +50,14 @@ test('美食与游玩分别生成解读且缓存不会混用活动模式',async(
     if(isSourceReview(body))return completion(directReview);
     const activity=JSON.parse(body.messages[1].content).store.activity;
     activities.push(activity);
-    return json({choices:[{finish_reason:'stop',message:{content:JSON.stringify({...model,selectionReason:activity==='play'?'游玩场馆解读':'美食门店解读'})}}]});
+    const selectionReason=activity==='play'?'游玩场馆解读：主营粤菜。':'美食门店解读：主营粤菜。';
+    return json({choices:[{finish_reason:'stop',message:{content:JSON.stringify({...model,selectionReason,citations:[
+      {index:0,quote:'主营粤菜',sentence:'这是一家粤菜餐厅。'},
+      {index:0,quote:'主营粤菜',sentence:selectionReason}
+    ]})}}]});
   }});
-  assert.equal((await research({...store,activity:'food'})).selectionReason,'美食门店解读');
-  assert.equal((await research({...store,activity:'play'})).selectionReason,'游玩场馆解读');
+  assert.equal((await research({...store,activity:'food'})).selectionReason,'美食门店解读：主营粤菜。');
+  assert.equal((await research({...store,activity:'play'})).selectionReason,'游玩场馆解读：主营粤菜。');
   await research({...store,activity:'play'});assert.deepEqual(activities,['food','play']);
 });
 
@@ -66,12 +73,16 @@ test('只在名单中提到门店的赛事报道不参与总结或来源展示',
       {index:1,relevance:'INDIRECT_MENTION',quote:''}
     ]});
     summarySources=JSON.parse(body.messages[1].content).sources;
-    return completion({...model,citations:[{index:0,quote:'茶月山是潮汕单丛茶饮品牌'},{index:1,quote:'活动联动陶陶居、茶月山'}]});
+    return completion({matched:true,introduction:'茶月山是潮汕单丛茶饮品牌。',selectionReason:'该品牌提供多种单丛茶饮，可以试试。',reviewSummary:'暂无评价。',citations:[
+      {index:0,quote:'茶月山是潮汕单丛茶饮品牌',sentence:'茶月山是潮汕单丛茶饮品牌。'},
+      {index:0,quote:'提供多种单丛茶饮',sentence:'该品牌提供多种单丛茶饮，可以试试。'},
+      {index:1,quote:'活动联动陶陶居、茶月山',sentence:'该品牌提供多种单丛茶饮，可以试试。'}
+    ]});
   }});
   const result=await research(store);
   assert.equal(result.status,'ready');
   assert.deepEqual(summarySources.map(s=>s.url),[direct.url]);
-  assert.deepEqual(result.evidence.map(s=>s.url),[direct.url]);
+  assert.deepEqual([...new Set(result.evidence.map(s=>s.url))],[direct.url]);
 });
 
 test('来源审核没有直接相关证据时沿用空结果兜底',async()=>{
@@ -203,6 +214,16 @@ test('品牌兜底明确标注通用介绍，本店评价和随机抽取理由�
   assert.doesNotMatch(html,/不应展示/);assert.match(reason,/随机抽中/);assert.match(reason,/品牌介绍/);assert.doesNotMatch(reason,/不应采用/);
 });
 
+test('结果来源展示逐字原文与控制字符转义，方便核对句子与出处',()=>{
+  const h=harness(async()=>true);
+  const ai={status:'ready',model:'deepseek-flash',introduction:'主营粤菜。',reviewSummary:'暂无相关评价。',evidence:[
+    {title:'示例来源',url:'https://example.com/a',quote:'主营粤菜<script>alert(1)</script>'}
+  ]};
+  const html=h.context.aiHTML({...store,ai});
+  assert.match(html,/原文：主营粤菜/);assert.match(html,/示例来源/);assert.ok(!html.includes('<script>'));
+  assert.equal(h.context.aiHTML({...store,ai:{...ai,evidence:[{title:'旧格式',url:'https://example.com/b'}]}}).includes('原文：'),false);
+});
+
 test('空资料显示原因，服务超时与分店不匹配不能显示成相同的无信息提示',()=>{
   const h=harness(async()=>true);
   const render=harness=>h.context.aiHTML({...store,ai:{status:'empty',harness}});
@@ -217,7 +238,7 @@ test('通用转盘仅发送中奖名称，检索摘要后生成带来源的简�
   const calls=[],summary='广州塔是广州的城市地标，可欣赏城市景观。';
   const server=createServer({config:{deepseekKey:'test'},traceStore:{record(){}},fetcher:async(url,options)=>{
     const body=JSON.parse(options.body);calls.push(body);
-    return json(url.endsWith('/search')?{results:[{title:'广州塔',url:'https://example.com/tower',summary}]}:{choices:[{finish_reason:'stop',message:{content:JSON.stringify({matched:true,introduction:summary,citations:[{index:0,quote:'广州塔是广州的城市地标'}]})}}]});
+    return json(url.endsWith('/search')?{results:[{title:'广州塔',url:'https://example.com/tower',summary}]}:{choices:[{finish_reason:'stop',message:{content:JSON.stringify({matched:true,introduction:summary,citations:[{index:0,quote:'广州塔是广州的城市地标',sentence:summary}]})}}]});
   }});
   await new Promise(r=>server.listen(0,'127.0.0.1',r));
   const base='http://127.0.0.1:'+server.address().port;

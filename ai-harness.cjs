@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const {randomUUID} = require('node:crypto');
 
-const VERSION = 'research-v3';
+const VERSION = 'research-v4';
 const MAX_ROUNDS = 2;
 const MAX_CALLS = 8;
 const MAX_RETRIES = 1;

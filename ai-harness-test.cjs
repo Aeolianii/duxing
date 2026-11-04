@@ -9,7 +9,10 @@ const {createServer}=require('./server.cjs');
 const store={source:'amap',poiId:'A',name:'测试餐厅(南门店)',city:'广州市',address:'广州市南门路1号'};
 const source={title:store.name,url:'https://example.com/branch-a',summary:'测试餐厅(南门店)位于广州市南门路1号，主营粤菜。'};
 const review={assessments:[{index:0,relevance:'DIRECT_RELEVANT',quote:'测试餐厅(南门店)位于广州市南门路1号'}]};
-const draft={matched:true,introduction:'这是一家主营粤菜的餐厅。',selectionReason:'这家店主营粤菜，可以作为这次用餐的选择。',citations:[{index:0,quote:'主营粤菜'}]};
+const draft={matched:true,introduction:'这是一家主营粤菜的餐厅。',selectionReason:'这家店主营粤菜，可以作为这次用餐的选择。',citations:[
+  {index:0,quote:'主营粤菜',sentence:'这是一家主营粤菜的餐厅。'},
+  {index:0,quote:'主营粤菜',sentence:'这家店主营粤菜，可以作为这次用餐的选择。'}
+]};
 const json=v=>new Response(JSON.stringify(v),{headers:{'Content-Type':'application/json'}});
 const complete=v=>json({choices:[{finish_reason:'stop',message:{content:JSON.stringify(v)}}],usage:{prompt_tokens:10,completion_tokens:5,total_tokens:15}});
 function fixture(handler,extra={}) {
@@ -88,10 +91,14 @@ test('损坏的 JSON、未完成的模型响应和无效搜索结构不能绕过
 test('真实接口常见的换行折叠可通过引用校验，字词改写或跨段拼接仍被拒绝',async()=>{
   const multiline={...source,summary:'测试餐厅(南门店)\n\n位于广州市南门路1号，主营粤菜。\n\n顾客评价：点心好吃。'};
   for(const valid of [true,false]) {
+    const quote=valid?'主营粤菜。 顾客评价：点心好吃。':'主营粤菜。 点心好吃。';
     const h=fixture(({stage})=>{
       if(stage==='search')return json({results:[multiline]});
       if(stage==='review')return complete({assessments:[{index:0,relevance:'DIRECT_RELEVANT',quote:'测试餐厅(南门店) 位于广州市南门路1号'}]});
-      return complete({...draft,citations:[{index:0,quote:valid?'主营粤菜。 顾客评价：点心好吃。':'主营粤菜。 点心好吃。'}]});
+      return complete({...draft,introduction:'这是一家主营粤菜的餐厅。顾客评价点心好吃。',selectionReason:'',citations:[
+        {index:0,quote,sentence:'这是一家主营粤菜的餐厅。'},
+        {index:0,quote,sentence:'顾客评价点心好吃。'}
+      ]});
     });
     const result=await h.research(store);
     assert.equal(result.status,valid?'ready':'empty');
@@ -117,7 +124,7 @@ test('分店资料不足时第二轮只搜索品牌，结果标记为品牌资�
     assert.equal(input.store.name,'测试餐厅');assert.equal(input.store.address,undefined);assert.equal(input.store.city,undefined);
     if(stage==='review')return complete({assessments:[{index:0,relevance:'DIRECT_RELEVANT',quote:brandSource.summary}]});
     assert.match(body.messages[0].content,/品牌的通用介绍/);
-    return complete({...draft,introduction:'测试餐厅是主营粤式点心的连锁餐饮品牌。',reviewSummary:'另一家店服务好。',selectionReason:'AI挑选了这家店。',citations:[{index:0,quote:brandSource.summary}]});
+    return complete({...draft,introduction:'测试餐厅是主营粤式点心的连锁餐饮品牌。',reviewSummary:'另一家店服务好。',selectionReason:'AI挑选了这家店。',citations:[{index:0,quote:brandSource.summary,sentence:'测试餐厅是主营粤式点心的连锁餐饮品牌。'}]});
   });
   const result=await h.research(store);
   assert.equal(result.status,'ready');assert.equal(result.scope,'brand');assert.equal(result.brandName,'测试餐厅');
@@ -164,20 +171,79 @@ test('没有可核实的顾客评价时返回统一空评价文案',async()=>{
 });
 
 test('真实评价附带摘要局限说明时保留评价正文，不误报没有评价',async()=>{
-  const h=fixture(({stage})=>stage==='summary'?complete({...draft,reviewSummary:'顾客提到虾饺口感好，也有评论反映服务员少。资料仅来自搜索摘要，未能核实全部评论。'}):null);
+  const reviewed={...source,summary:source.summary+'顾客提到虾饺口感好，也有评论反映服务员少。'};
+  const h=fixture(({stage})=>{
+    if(stage==='search')return json({results:[reviewed]});
+    if(stage==='summary')return complete({...draft,reviewSummary:'顾客提到虾饺口感好，也有评论反映服务员少。资料仅来自搜索摘要，未能核实全部评论。',citations:[
+      ...draft.citations,
+      {index:0,quote:'顾客提到虾饺口感好',sentence:'顾客提到虾饺口感好，也有评论反映服务员少。'}
+    ]});
+  });
   assert.equal((await h.research(store)).reviewSummary,'顾客提到虾饺口感好，也有评论反映服务员少。');
 });
 
-test('第六条以后的有效引用仍展示对应来源，不能只展示前五条所属页面',async()=>{
+test('不同来源的逐句引用分别保留原文与来源，不因来源条数减少证据',async()=>{
   const secondary={...source,url:'https://example.com/reviews',summary:source.summary+'顾客称点心好吃，服务员少。'};
+  const introduction='测试餐厅(南门店)位于广州市南门路1号。';
+  const selectionReason='顾客称点心好吃，服务员少。';
   const h=fixture(({stage})=>{
     if(stage==='search')return json({results:[source,secondary]});
     if(stage==='review')return complete({assessments:[...review.assessments,{...review.assessments[0],index:1}]});
-    return complete({...draft,reviewSummary:'有顾客认为点心好吃，也提到服务员少。',citations:[
-      ...Array.from({length:5},()=>({index:0,quote:'主营粤菜'})),{index:1,quote:'顾客称点心好吃，服务员少。'}
+    return complete({...draft,introduction,selectionReason,reviewSummary:'',citations:[
+      {index:0,quote:'测试餐厅(南门店)位于广州市南门路1号',sentence:introduction},
+      {index:0,quote:'主营粤菜',sentence:selectionReason},
+      {index:1,quote:'顾客称点心好吃，服务员少。',sentence:selectionReason}
     ]});
   });
-  assert.deepEqual((await h.research(store)).evidence.map(e=>e.url),[source.url,secondary.url]);
+  const result=await h.research(store);
+  assert.equal(result.status,'ready');
+  assert.deepEqual(result.evidence.map(e=>e.url),[source.url,secondary.url]);
+  assert.ok(result.evidence.every(e=>e.quote&&e.sentence));
+});
+
+test('未登记引用的句子会被剪掉，只保留有逐字引用支持的文案',async()=>{
+  const h=fixture(({stage})=>stage==='summary'?complete({...draft,citations:[draft.citations[0]]}):null);
+  const result=await h.research(store);
+  assert.equal(result.status,'ready');assert.equal(result.harness.attempts,1);
+  assert.equal(result.introduction,'这是一家主营粤菜的餐厅。');assert.equal(result.selectionReason,'');
+  assert.ok(h.traces[0].steps.some(s=>s.stage==='claim_prune'&&s.status==='pruned'));
+});
+
+test('没有依据的事实句不会进入展示文案',async()=>{
+  const h=fixture(({stage})=>stage==='summary'?complete({...draft,introduction:'这是一家主营粤菜的餐厅。这家店环境优雅服务周到。',selectionReason:'',citations:[draft.citations[0]]}):null);
+  const result=await h.research(store);
+  assert.equal(result.status,'ready');
+  assert.equal(result.introduction,'这是一家主营粤菜的餐厅。');
+  assert.doesNotMatch(result.introduction,/环境优雅/);
+  assert.equal(h.traces[0].steps.filter(s=>s.stage==='claim_prune').length,1);
+});
+
+test('介绍句全部没有引用时剪空降级，不展示无依据文案',async()=>{
+  const h=fixture(({stage})=>stage==='summary'?complete({...draft,introduction:'这家店环境优雅服务周到。',selectionReason:'',reviewSummary:'店内主营粤菜。',citations:[{index:0,quote:'主营粤菜',sentence:'店内主营粤菜。'}]}):null);
+  const result=await h.research(store);
+  assert.equal(result.status,'empty');assert.equal(result.harness.reason,'unsupported_claim');
+  assert.equal(result.introduction,'');assert.deepEqual(result.evidence,[]);assert.equal(result.harness.attempts,2);
+});
+
+test('引用指向输出里不存在的句子时被忽略，不进入证据',async()=>{
+  const h=fixture(({stage})=>stage==='summary'?complete({...draft,citations:[
+    ...draft.citations,
+    {index:0,quote:'主营粤菜',sentence:'这句并不在展示文案中。'}
+  ]}):null);
+  const result=await h.research(store);
+  assert.equal(result.status,'ready');assert.equal(result.evidence.length,1);
+  assert.equal(result.evidence[0].quote,'主营粤菜');assert.ok(result.evidence[0].sentence);
+});
+
+test('同一句由多条不同原文支持时，证据分别保留可核对的 quote',async()=>{
+  const introduction='测试餐厅(南门店)位于广州市南门路1号，主营粤菜。';
+  const h=fixture(({stage})=>stage==='summary'?complete({...draft,introduction,selectionReason:'',citations:[
+    {index:0,quote:'测试餐厅(南门店)位于广州市南门路1号',sentence:introduction},
+    {index:0,quote:'主营粤菜',sentence:introduction}
+  ]}):null);
+  const result=await h.research(store);
+  assert.equal(result.status,'ready');
+  assert.deepEqual(result.evidence.map(e=>e.quote),['测试餐厅(南门店)位于广州市南门路1号','主营粤菜']);
 });
 
 test('上游临时失败最多重试一次，恢复后仍完成校验',async()=>{
