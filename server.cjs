@@ -42,7 +42,7 @@ async function readJson(req, limit) {
 function createServer({config = loadConfig(), fetcher = fetch, reviews, uploadsDir = path.join(DATA_DIR, 'uploads')} = {}) {
   const research=createResearch({config,fetcher}),optionResearch=createResearch({config,fetcher,allowOptions:true});
   const reviewStore = reviews || createReviewStore({file: path.join(DATA_DIR, 'reviews.json'), uploadDir: uploadsDir});
-  const files = new Set(['index.html', 'style.css', 'app.js', 'core.js', 'amap-client.js', 'map-ui.js', 'discovery.js', 'ai-client.js', 'wheel-motion.js', 'app-history.js', 'freewheel.js','travel-core.js','travel.js', 'assets/food.webp', 'assets/play.webp', 'assets/travel.webp', 'assets/custom.webp','reviews.js']);
+  const files = new Set(['index.html', 'style.css', 'app.js', 'core.js', 'amap-client.js', 'map-ui.js', 'discovery.js', 'ai-client.js', 'wheel-motion.js', 'app-history.js', 'freewheel.js','travel-core.js','travel.js', 'assets/food.webp', 'assets/play.webp', 'assets/travel.webp', 'assets/custom.webp','review-model.js','reviews.js']);
   const types = {'.html':'text/html; charset=utf-8', '.js':'application/javascript; charset=utf-8', '.css':'text/css; charset=utf-8', '.webp':'image/webp'};
   const uploadTypes = {'.jpg':'image/jpeg', '.png':'image/png', '.webp':'image/webp'};
   return http.createServer(async (req, res) => {
@@ -74,12 +74,12 @@ function createServer({config = loadConfig(), fetcher = fetch, reviews, uploadsD
         }));
       } catch (error) { return json(error.status || 500, {error: error.status ? error.message : '读取评价失败'}); }
     }
-    if (['/api/reviews','/api/reviews/like'].includes(url.pathname) && req.method === 'POST') {
+    if ((url.pathname === '/api/reviews' && ['POST','PUT'].includes(req.method)) || (url.pathname === '/api/reviews/like' && req.method === 'POST')) {
       try {
         const limit = url.pathname === '/api/reviews' ? 3 * 1024 * 1024 : 2048;
         const input = await readJson(req, limit);
         const result = url.pathname === '/api/reviews'
-          ? reviewStore.add({...input, ip: req.socket.remoteAddress})
+          ? reviewStore[req.method === 'PUT' ? 'update' : 'add']({...input, ip: req.socket.remoteAddress})
           : reviewStore.like({...input, ip: req.socket.remoteAddress});
         return json(200, result);
       } catch (error) { return json(error.status || 500, {error: error.status ? error.message : '评价保存失败，请重试'}); }

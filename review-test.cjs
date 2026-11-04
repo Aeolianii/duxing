@@ -229,3 +229,42 @@ test('HTTP 接口：列表、发布、图片访问、点赞与超大请求', asy
     await new Promise(resolve => server.close(resolve));
   }
 });
+
+
+test('只允许本人修改评价，保留 ID、点赞、图片和初次发布时间',()=>{
+  const {store,reopen}=fresh();
+  const created=store.add({...base,images:[PNG]});
+  store.like({reviewId:created.id,device:'device-other-2222'});
+  assert.throws(()=>store.update({...base,reviewId:created.id,device:'device-other-2222'}),/只能修改/);
+  const updated=store.update({...base,reviewId:created.id,rating:2,content:'更新后的真实体验，不是新增一条。',keepImages:created.images,images:[],date:'private-date',price:888,note:'private-note'});
+  assert.equal(updated.id,created.id);assert.equal(updated.createdAt,created.createdAt);assert.equal(updated.rating,2);
+  assert.equal(updated.likes,1);assert.deepEqual(updated.images,created.images);
+  assert.equal(reopen().list({poiId:base.poiId}).total,1);
+  assert.doesNotMatch(JSON.stringify(updated),/private-date|private-note|888/);
+});
+
+test('我的评价不受列表分页或标签筛选影响，不能借用别人的图片',()=>{
+  const {store}=fresh(),mine=store.add({...base,images:[PNG]});
+  const other=store.add({...base,device:'device-other-2222',images:[PNG]});
+  const list=store.list({poiId:base.poiId,device:base.device,tag:'排队久',page:9});
+  assert.equal(list.reviews.length,0);assert.equal(list.myReview.id,mine.id);
+  assert.equal(store.list({poiId:base.poiId}).myReview,null);
+  assert.throws(()=>store.update({...base,reviewId:mine.id,keepImages:other.images}),/自己的评价图片/);
+  assert.throws(()=>store.update({...base,reviewId:mine.id,rating:0}),/评分/);
+  assert.equal(store.list({poiId:base.poiId,device:base.device}).myReview.rating,5);
+});
+
+test('HTTP PUT 更新自己的评价并重新计算站内平均分',async()=>{
+  const {store,uploadDir}=fresh();const created=store.add({...base});
+  const server=createServer({config:{},reviews:store,uploadsDir:uploadDir});
+  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+  const origin='http://127.0.0.1:'+server.address().port;
+  try{
+    const update=body=>fetch(origin+'/api/reviews',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    assert.equal((await update({...base,reviewId:created.id,device:'device-not-owner'})).status,403);
+    const response=await update({...base,reviewId:created.id,rating:3,content:'更新后的评价内容。',keepImages:[]});
+    assert.equal(response.status,200);assert.equal((await response.json()).id,created.id);
+    const data=await (await fetch(origin+'/api/reviews?'+new URLSearchParams({poiId:base.poiId,device:base.device}))).json();
+    assert.equal(data.total,1);assert.equal(data.summary.average,3);assert.equal(data.myReview.rating,3);
+  }finally{await new Promise(resolve=>server.close(resolve));}
+});

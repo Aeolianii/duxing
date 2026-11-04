@@ -69,7 +69,7 @@ function toPublic(record, device) {
     id: record.id, rating: record.rating, content: record.content, tags: record.tags.slice(),
     images: record.images.map(name => '/uploads/' + name),
     author: {name: record.author.name, avatar: record.author.avatar ? '/uploads/' + record.author.avatar : ''},
-    createdAt: record.createdAt, likes: record.likedBy.length,
+    createdAt: record.createdAt, updatedAt: record.updatedAt || record.createdAt, likes: record.likedBy.length,
     liked: Boolean(device) && record.likedBy.includes(device),
     mine: Boolean(device) && record.device === device
   };
@@ -179,6 +179,32 @@ function createReviewStore({file, uploadDir, now = () => Date.now()} = {}) {
       persist();
       return toPublic(record, device);
     },
+    update(input = {}) {
+      limited(input.ip, 'review', LIMITS.reviewsPerHour);
+      const device=hashDevice(input.device),record=records.find(item=>item.id===input.reviewId);
+      if(!record)throw fail(404,'这条评价不存在');
+      if(record.device!==device)throw fail(403,'只能修改自己的评价');
+      if(input.poiId && cleanPoiId(input.poiId)!==record.poiId)throw fail(400,'门店信息不一致');
+      const rating=Number(input.rating);
+      if(!Number.isInteger(rating)||rating<1||rating>5)throw fail(400,'评分需要 1 到 5 星');
+      const content=cleanText(input.content,LIMITS.contentMin,LIMITS.contentMax,'评价内容');
+      const tags=cleanTags(input.tags,record.activity),author=cleanAuthor(input.author);
+      const keep=input.keepImages==null?record.images:input.keepImages;
+      if(!Array.isArray(keep))throw fail(400,'保留图片格式无效');
+      const kept=[...new Set(keep.map(name=>typeof name==='string'?name.replace(/^\/uploads\//,''):''))];
+      if(kept.some(name=>!record.images.includes(name)))throw fail(400,'只能保留自己的评价图片');
+      const added=input.images==null?[]:input.images;
+      if(!Array.isArray(added)||kept.length+added.length>LIMITS.images)throw fail(400,'最多上传 3 张图片');
+      const parsed=added.map(image=>parseDataURL(image,LIMITS.imageBytes));
+      const total=kept.reduce((sum,name)=>sum+fs.statSync(path.join(uploadDir,name)).size,0)+parsed.reduce((sum,image)=>sum+image.buffer.length,0);
+      if(total>LIMITS.imagesTotal)throw fail(413,'图片总大小超出限制');
+      const revision=crypto.randomUUID(),images=[...kept,...parsed.map((image,index)=>writeImage(revision,String(index+1),image))];
+      const avatar=author.avatar?writeImage(revision,'avatar',author.avatar):record.author.avatar;
+      const next={...record,rating,content,tags,images,author:{name:author.name,avatar},updatedAt:new Date(now()).toISOString()};
+      const index=records.indexOf(record);records[index]=next;
+      try{persist();}catch(error){records[index]=record;throw error;}
+      return toPublic(next,device);
+    },
     like(input = {}) {
       limited(input.ip, 'like', LIMITS.likesPerHour);
       const device = hashDevice(input.device);
@@ -205,6 +231,7 @@ function createReviewStore({file, uploadDir, now = () => Date.now()} = {}) {
       return {
         poiId, sort, tag, page, pageSize: size, total: sorted.length,
         summary: summarize(all),
+        myReview: all.find(item=>device && item.device===device)?toPublic(all.find(item=>item.device===device),device):null,
         reviews: sorted.slice(start, start + size).map(item => toPublic(item, device)),
         hasMore: start + size < sorted.length
       };

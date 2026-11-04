@@ -43,7 +43,9 @@
 
 - 转盘抽中后，结果页下方展示这家店的**本站用户评价**：平均分、五星分布直方图、标签云、图片墙，按「最有帮助 / 最新 / 最低分 / 最高分」排序，可点标签筛选、可「加载更多」。
 - 点「写评价」可以打 1～5 星、选最多 4 个标签、写 5～600 字、上传最多 3 张图片；图片在浏览器里先压缩再上传，头像取自个人资料。
-- 每台设备对同一家店只能评价一次；「有用」可以再点一次取消；评价存在本地服务的 `data/` 目录，重启后仍在。
+- 足迹与结果页共用「记录与评价」表单及同一份五星评分；可以多次记录到访，日期、花费和私密备注各自保留。原有「喜欢／一般／不喜欢」保留为历史感受，不自动换算星级。
+- 评分、文字和图片默认仅保存在本机；明确勾选「同时发布到站内」后才公开。每台设备对同一家店保留一条可修改的公开评价；修改后更新原评价及站内平均分，保留点赞与原发布时间。
+- 「有用」可以再点一次取消；公开评价存在本地服务的 `data/` 目录，重启后仍在。个人评分、高德评分和站内平均分分别标注。
 - 评价区**没有任何内置或伪造数据**：没人写过就显示「还没有人评价过这里」。演示 / 自选门店的评价会额外标注来源，避免和真实门店混淆。
 
 ### 其他
@@ -112,6 +114,7 @@ demo/
 ├─ ai-service.cjs        服务端 DeepSeek 搜索 + Chat 整理
 ├─ reviews.js            结果页评价区：星级分布、标签、排序、点赞、写评价与图片压缩
 ├─ reviews.cjs           服务端评价存储：校验、去重、点赞、图片落盘（data/）
+├─ review-model.js       我的五星评价与到访记录关联、本机保存与失败回滚
 ├─ data/                 运行时生成：reviews.json 与 uploads/ 图片（已 gitignore）
 ├─ style.css             全部样式（手机竖屏优先，320px 起适配）
 ├─ assets/               首页与自定义页卡通插画
@@ -120,7 +123,8 @@ demo/
 ├─ map-test.cjs          高德适配 / 去重 / 代理 / 竞态测试（43 项）
 ├─ ai-test.cjs           AI 链路测试（21 项）
 ├─ travel-test.cjs       旅行链路测试（13 项）
-├─ review-test.cjs       评价链路测试（14 项：校验、去重、排序、点赞、图片、HTTP）
+├─ review-test.cjs       评价链路测试（17 项：校验、编辑权限、排序、点赞、图片、HTTP）
+├─ review-model-test.cjs 统一评分、旧足迹保留、重复到访与保存回滚（5 项）
 ├─ 启动原型.cmd           Windows 启动脚本
 ├─ 高德接入说明.md        高德 Key 申请、配置与已知边界
 └─ 验证记录.md            分阶段实网验证与测试记录
@@ -129,7 +133,7 @@ demo/
 ## 技术实现
 
 - **前端**：纯原生 HTML / CSS / JavaScript，无框架、无打包步骤；多文件脚本按功能拆分。转盘、地图覆盖物均为内联 SVG。
-- **本地服务**：`node:http` 实现静态文件白名单（只暴露页面所需文件）、`/api/map-config`、`/api/ai-config`、`/api/store-research`、`/api/option-research`、`/api/reviews`（GET 列表 / POST 发布）、`/api/reviews/like`、`/uploads/*`（评价图片），以及 `/_AMapService` 高德安全代理（固定上游、覆盖伪造参数、隐藏安全密钥、拒绝非法回调）。
+- **本地服务**：`node:http` 实现静态文件白名单（只暴露页面所需文件）、`/api/map-config`、`/api/ai-config`、`/api/store-research`、`/api/option-research`、`/api/reviews`（GET 列表 / POST 发布 / PUT 修改本人评价）、`/api/reviews/like`、`/uploads/*`（评价图片），以及 `/_AMapService` 高德安全代理（固定上游、覆盖伪造参数、隐藏安全密钥、拒绝非法回调）。
 - **高德地图**：JS API 2.0 插件（PlaceSearch / Geocoder / Geolocation / Walking / Driving / Transfer）。JS API 2.0 把 `rating`、`cost`、`open_time` 放在 POI 顶层；分类按类型码检索，路线请求串行节流并缓存 5 分钟。
 - **去重与价格语义**：景点类按名称包含 / 名称前缀 / 地址中的地标名做 300 米内聚类（并查集合并），保留评分最高、资料最全的一个；景点门票未知时显示「门票以景区为准」，不参与人均排除。
 - **AI**：DeepSeek Search API + Chat Completions，先搜公开摘要；真实门店 / 场馆先审核来源是否直接相关，再整理 JSON，排除名单中顺带提及、无关地点等来源。介绍与评价分开展示，缺少评价时显示「暂无相关评价」。保留中奖优先、15 分钟缓存、超时降级、来源逐字校验，不编造评分 / 图片 / 链接。
@@ -145,6 +149,7 @@ node --test ai-test.cjs
 node --test travel-test.cjs
 node --test ui-test.cjs
 node --test review-test.cjs
+node --test review-model-test.cjs
 ```
 
 已有 Playwright 和 Chromium 的环境还可运行 `node browser-test.cjs`，验证返回 / 前进、嵌套弹层、未提交表单和实际动画。`DOUX_TEST_CHROMIUM` 可指定已有 Chromium 路径；无需给原型安装运行依赖。
