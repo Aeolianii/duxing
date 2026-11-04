@@ -20,7 +20,7 @@ function renderDiscovery(){
     return;
   }
   const group=state.page==='fair',c=state.config;
-  $('#view').innerHTML=((state.activity==='play')?heading('先找好玩的，再交给好运。','这一场，让好运帮你选。'):heading('先找美味，再交给好运。','这一餐，让好运帮你选。'))+`<div class="discovery-toolbar">${(state.activity==='play')?'<span class="mode-button" role="status">📍 单人定位</span>':`<button id="locationMode" class="mode-button">${group?'👫 多人定位':'📍 单人定位'}</button>`}<button id="openFilters" class="preference-button">${modeIcon(c.mode)} ${group?'各自的路程':c.mode+' '+c.limit+'分钟'} · ${c.types.length?esc(c.types.join('/')):((state.activity==='play')?'玩什么都行':'口味都行')} <span>筛选</span></button></div>
+  $('#view').innerHTML=((state.activity==='play')?heading('先找好玩的，再交给好运。','这一场，让好运帮你选。'):heading('先找美味，再交给好运。','这一餐，让好运帮你选。'))+`<div class="discovery-toolbar"><button id="locationMode" class="mode-button">${group?((state.activity==='play')?'👫 多人同玩':'👫 多人定位'):'📍 单人定位'}</button><button id="openFilters" class="preference-button">${modeIcon(c.mode)} ${group?'各自的路程':c.mode+' '+c.limit+'分钟'} · ${c.types.length?esc(c.types.join('/')):((state.activity==='play')?'玩什么都行':'口味都行')} <span>筛选</span></button></div>
   <section class="map-stage"><div class="map-search-button"><button id="homeSearch">⌕ 搜索城市、地铁站、商圈</button><button id="homeLocate" aria-label="使用当前位置">⌖</button></div>
     ${state.live?'<div id="homeMap" aria-label="美食地图，点击选择出发点"></div><div id="homeMapLoading" class="home-map-loading">🗺️ 正在打开地图…</div>':demoHomeMap()}
   </section>
@@ -109,7 +109,7 @@ async function loadHomePreviews(){
     if(!stores.length)$('#mapHint').textContent='附近暂未找到'+((state.activity==='play')?'场馆':'餐厅')+'，试试调整位置或筛选。';
   }catch(error){if(token===discovery.previewToken&&$('#mapHint')){discovery.previews=[];paintHomePins(false);$('#mapHint').textContent=error.message;}}
 }
-function openLocationMode(){showModal(modalTop('这次，和谁一起吃？')+`<div class="location-choices"><button data-location-mode="single"><span>🙋</span><strong>单人定位</strong><small>以一个出发点寻找附近美食</small></button><button data-location-mode="multi"><span>👫</span><strong>多人定位</strong><small>2～6 个起点，照顾每个人的路程</small></button></div>`);}
+function openLocationMode(){const play=state.activity==='play';showModal(modalTop(play?'这次，和谁一起玩？':'这次，和谁一起吃？')+`<div class="location-choices"><button data-location-mode="single"><span>🙋</span><strong>单人定位</strong><small>${play?'以一个出发点寻找附近好玩':'以一个出发点寻找附近美食'}</small></button><button data-location-mode="multi"><span>👫</span><strong>多人定位</strong><small>2～6 个起点，照顾每个人的路程</small></button></div>`);}
 function returnToMap(){state.request++;state.loading=false;state.stage='map';state.searchMessage='';render();window.scrollTo({top:0});}
 function renderGenerating(){
   const progress=state.progress||{value:5,title:(state.activity==='play')?'正在寻找附近好玩…':'正在寻找附近美味…',detail:(state.activity==='play')?'先找场馆，再逐一确认路线':'先找餐厅，再逐一确认路线'};
@@ -129,7 +129,7 @@ async function buildDemoWheel(){
 }
 function handleDiscoveryAction(button){
   const d=button.dataset;
-  if(d.locationMode){state.locationMode=d.locationMode;state.page=d.locationMode==='multi'?'fair':'near';state.activeOrigin=0;discovery.previews=[];discovery.camera=null;generate();render();$('#modal').close();if(state.page==='fair')openPeople();return true;}
+  if(d.locationMode){state.locationMode=d.locationMode;state.page=d.locationMode==='multi'?'fair':(state.activity==='play'?'play':'near');state.activeOrigin=0;discovery.previews=[];discovery.camera=null;generate();render();$('#modal').close();if(state.page==='fair')openPeople();return true;}
   if(d.homePerson!==undefined){state.activeOrigin=+d.homePerson;$('#originStrip').innerHTML=originChips();if(state.live)paintHomePins(false);else paintDemoPins();return true;}
   if(d.preview!==undefined){const s=discovery.previews[+d.preview];if(s)detail(s);return true;}
   switch(button.id){

@@ -156,6 +156,58 @@
     '烧烤':{type:'050000',keyword:'烧烤|烤串'},
     '奶茶':{type:'050000',keyword:'奶茶|茶饮|喜茶|奈雪|蜜雪冰城|古茗|茶百道|霸王茶姬|沪上阿姨|一点点|益禾堂|书亦烧仙草|茶月山'}
   };
+  // Attraction-type POIs (scenic spots, parks, museums, galleries) usually come
+  // back as several sub-points of the same venue: 广州塔 / 广州塔A区 / 登塔大厅 /
+  // 450米观景平台. They are merged into one candidate; the venue with the best
+  // public data (rating, photos, shorter name) represents the group.
+  const ATTRACTION_CATEGORY = /风景名胜|旅游景点|国家级景点|省级景点|观景点|城市广场|公园|博物馆|展览馆|美术馆|世界遗产/;
+  const ATTRACTION_LABELS = ['景点', '博物馆', '美术馆', '公园'];
+  function isAttractionStore(store) {
+    return ATTRACTION_CATEGORY.test(text(store.category) + ' ' + text(store.type));
+  }
+  function distanceMeters(a, b) {
+    if (!Array.isArray(a) || !Array.isArray(b)) return Infinity;
+    const rad = Math.PI / 180, dLat = (b[1] - a[1]) * rad, dLng = (b[0] - a[0]) * rad;
+    const h = Math.sin(dLat / 2) ** 2 + Math.cos(a[1] * rad) * Math.cos(b[1] * rad) * Math.sin(dLng / 2) ** 2;
+    return 6371000 * 2 * Math.asin(Math.sqrt(Math.min(1, h)));
+  }
+  const plainText = value => text(value).replace(/[（(][^）)]*[）)]/g, '').replace(/[^\u4e00-\u9fa5A-Za-z0-9]/g, '');
+  function commonPrefixLength(a, b) { let i = 0; while (i < a.length && i < b.length && a[i] === b[i]) i++; return i; }
+  function sameVenue(a, b, label) {
+    if (distanceMeters(a.location, b.location) > 300) return false;
+    const left = plainText(a.name), right = plainText(b.name);
+    if (left && right && (left.startsWith(right) || right.startsWith(left) || commonPrefixLength(left, right) >= 3)) return true;
+    if (ATTRACTION_LABELS.includes(label)) {
+      const la = plainText(a.address), lb = plainText(b.address);
+      // A sub-point addresses itself with the landmark name (e.g. 「阅江西路
+      // 222号广州塔E区108层」); sharing a street prefix alone is not enough,
+      // otherwise a neighbouring venue on the same street gets merged too.
+      if (la && lb && (la.includes(right) || lb.includes(left))) return true;
+    }
+    return false;
+  }
+  function venueScore(store) {
+    return [Number(store.rating) || 0, Array.isArray(store.photos) ? store.photos.length : 0, -text(store.name).length];
+  }
+  function betterVenue(a, b) {
+    const left = venueScore(a), right = venueScore(b);
+    for (let i = 0; i < left.length; i++) if (left[i] !== right[i]) return left[i] > right[i] ? a : b;
+    return a;
+  }
+  function dedupeVenues(stores, label) {
+    const parent = stores.map((_, index) => index);
+    const find = index => { while (parent[index] !== index) { parent[index] = parent[parent[index]]; index = parent[index]; } return index; };
+    const union = (i, j) => { const a = find(i), b = find(j); if (a !== b) parent[b] = a; };
+    for (let i = 0; i < stores.length; i++) for (let j = i + 1; j < stores.length; j++) if (sameVenue(stores[i], stores[j], label)) union(i, j);
+    const groups = new Map();
+    stores.forEach((store, index) => { const root = find(index); if (!groups.has(root)) groups.set(root, []); groups.get(root).push(store); });
+    return [...groups.values()].map(group => {
+      let winner = group[0];
+      for (const store of group.slice(1)) winner = betterVenue(winner, store);
+      if (!(winner.photos || []).length) { const withPhotos = group.find(store => (store.photos || []).length); if (withPhotos) winner.photos = withPhotos.photos; }
+      return winner;
+    });
+  }
   function matchesCuisine(store, selected) {
     if (!selected.length) return true;
     return selected.some(label => {
@@ -232,8 +284,9 @@
       const list = config.preview ? pairs.slice(0, 3) : pairs;
       const groups = [];
       for (const [label, query] of list) {
-        const result = await call(done => new A.PlaceSearch({type:query.type,pageSize:20,extensions:'all'}).searchNearBy(query.keyword||'',origin,radius,done));
-        groups.push((result?.poiList?.pois||[]).map(poi=>normalize(poi)).filter(p => p.location && matchesPlay(p, [label])));
+        const result = await call(done => new A.PlaceSearch({type:query.type,pageSize:20,pageIndex:config.pageIndex||1,extensions:'all'}).searchNearBy(query.keyword||'',origin,radius,done));
+        const pois = (result?.poiList?.pois||[]).map(poi=>normalize(poi)).filter(p => p.location && matchesPlay(p, [label]));
+        groups.push(dedupeVenues(pois, label));
         if (list.length > 1) await new Promise(resolve => setTimeout(resolve, 420));
       }
       const unique = new Map();
@@ -327,6 +380,6 @@
     if(!point) throw new Error('未获取到定位，请在地图上手动选点');
     return {location:point,name:result.formattedAddress || '我的位置'};
   }
-  const api={coordinates,normalize,parseHours,mergeDetails,routeMinutes,transitMinutes,cityAt,eligible,matchesCuisine,matchesPlay,playQueries,playTypes:Object.keys(playQueries),decoratePlay,playEmoji,call,load,search,nearby,route,details,locate};
+  const api={coordinates,normalize,parseHours,mergeDetails,routeMinutes,transitMinutes,cityAt,eligible,matchesCuisine,matchesPlay,dedupeVenues,isAttractionStore,playQueries,playTypes:Object.keys(playQueries),decoratePlay,playEmoji,call,load,search,nearby,route,details,locate};
   if(typeof module!=='undefined') module.exports=api; else root.DouxMap=api;
 })(typeof window!=='undefined'?window:globalThis);

@@ -135,6 +135,17 @@ test('详情卡片区分缺失商业数据、缺少起点和路线错误，并�
   for(const value of ['4.8','¥90','12 分钟','步行'])assert.ok(html.includes(value));
 });
 
+test('游玩结果区分景区门票与娱乐场馆人均',()=>{
+  const h=harness(async()=>true);
+  const tower=h.context.statsHTML({source:'amap',activity:'play',name:'广州塔',category:'风景名胜;风景名胜;国家级景点',type:'国家级景点',routeStatus:'missing-origin'});
+  assert.match(tower,/门票以景区为准/);assert.match(tower,/门票/);assert.match(tower,/开放时间/);
+  const ktv=h.context.statsHTML({source:'amap',activity:'play',name:'星聚会KTV',category:'体育休闲服务;娱乐场所;KTV',type:'KTV',price:88,routeStatus:'missing-origin'});
+  assert.match(ktv,/¥88/);assert.match(ktv,/参考人均/);assert.doesNotMatch(ktv,/门票以景区为准/);
+  const pricedTicket=h.context.statsHTML({source:'amap',activity:'play',name:'广州塔',category:'风景名胜;风景名胜;国家级景点',price:60,max:5,routeStatus:'ready'});
+  assert.match(pricedTicket,/¥60/);assert.match(pricedTicket,/门票/);
+  assert.match(h.context.statsHTML({source:'amap',activity:'play',name:'未知价场馆',category:'体育休闲服务;娱乐场所;KTV',routeStatus:'missing-origin'}),/人均未知/);
+});
+
 
 test('结果理由展示真实 AI 段落、转义内容，并随当前路程变化更新',()=>{
   const h=harness(async()=>true);

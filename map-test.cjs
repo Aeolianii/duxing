@@ -126,6 +126,46 @@ test('景点类游玩分类：景点、博物馆、美术馆与公园',()=>{
   assert.equal(adapter.playEmoji(tower),'🗺️');
   assert.equal(adapter.playEmoji({name:'金逸空中电影城',category:'体育休闲服务;影剧院;电影院'}),'🎬');
 });
+test('同一景区的多个子点位合并为一个候选，不同场馆不合并',()=>{
+  const base={category:'风景名胜;风景名胜;国家级景点',location:[113.3245,23.1065],address:'广州市海珠区阅江西路222号',type:'国家级景点'};
+  const stores=[
+    {...base,name:'广州塔',rating:'4.8',photos:[{url:'https://example.test/tower.jpg'}]},
+    {...base,name:'广州塔A区',rating:'3.9'},
+    {...base,name:'广州塔-登塔大厅',rating:'3.9'},
+    {...base,name:'450米观景平台',rating:'3.4',address:'广州市海珠区阅江西路222号广州塔2层'},
+    {...base,name:'荔江湾奇石文化博物馆',rating:'3.2',address:'广州市海珠区滨江东路与艺苑路交叉口东南160米'},
+    {...base,name:'广东省博物馆',location:[113.33,23.11],address:'珠江东路2号',category:'科教文化服务;博物馆;博物馆',rating:'4.7'}
+  ];
+  const merged=adapter.dedupeVenues(stores,'景点');
+  assert.deepEqual(merged.map(s=>s.name).sort(),['广州塔','广东省博物馆','荔江湾奇石文化博物馆'].sort());
+  assert.equal(merged.find(s=>s.name==='广州塔').rating,'4.8');
+  const venues=[
+    {name:'星聚会KTV(天河店)',location:[113.32,23.1],category:'体育休闲服务;娱乐场所;KTV',address:'天河路1号'},
+    {name:'星聚会KTV(珠江新城店)',location:[113.33,23.11],category:'体育休闲服务;娱乐场所;KTV',address:'珠江东路2号'}
+  ];
+  assert.equal(adapter.dedupeVenues(venues,'唱K').length,2);
+  assert.equal(adapter.isAttractionStore({activity:'play',category:'风景名胜;公园广场;公园',type:'公园'}),true);
+  assert.equal(adapter.isAttractionStore({activity:'play',category:'科教文化服务;博物馆;博物馆',type:'博物馆'}),true);
+  assert.equal(adapter.isAttractionStore({activity:'play',category:'体育休闲服务;娱乐场所;KTV',type:'KTV'}),false);
+});
+test('游玩对齐美食：人均未知保留、营业筛选生效、支持多人起点',async()=>{
+  const fixed=new Date(2026,10,4,12,0,0);
+  class FixedDate extends Date{constructor(...args){super(...(args.length?args:[+fixed]));}static now(){return +fixed;}}
+  const h=harness({nearby:async()=>[
+    {id:'ticket',source:'amap',activity:'play',name:'广州塔',category:'风景名胜;风景名胜;国家级景点',location:[113,23],price:null,hours:[[0,1440]],hoursText:'24 小时营业'},
+    {id:'known',source:'amap',activity:'play',name:'星聚会KTV',category:'体育休闲服务;娱乐场所;KTV',location:[113,23],price:60,hours:[[0,1440]],hoursText:'24 小时营业'},
+    {id:'closed',source:'amap',activity:'play',name:'已打烊场馆',category:'风景名胜;风景名胜;旅游景点',location:[113,23],price:30,hours:[[100,120]],hoursText:'01:40-02:00'},
+    {id:'unknown',source:'amap',activity:'play',name:'开放时间未知',category:'风景名胜;风景名胜;旅游景点',location:[113,23],price:30,hours:null}
+  ],route:async()=>10});
+  h.Date=FixedDate;
+  h.state.activity='play';h.state.page='fair';
+  h.state.people=[{origin:{location:[113,23]},mode:'步行',limit:30},{origin:{location:[114,23]},mode:'步行',limit:30}];
+  h.state.config={mode:'步行',limit:30,budget:100,types:[],count:6,activity:'play',open:true,unknownPrice:true,unknownHours:false};
+  await h.refreshCandidates();
+  assert.deepEqual(Array.from(h.state.candidates,s=>s.id).sort(),['known','ticket']);
+  assert.ok(h.state.candidates.every(s=>s.opening===true));
+  assert.ok(Array.isArray(h.state.candidates[0].times)&&h.state.candidates[0].times.length===2);
+});
 test('游玩附近搜索逐个分类请求，只保留匹配场馆并带场馆表情',async()=>{
   const calls=[];
   const poi=(id,name,type,typecode)=>({id,name,type,typecode,location:'113.3,23.1',biz_ext:{}});
@@ -318,10 +358,10 @@ test('多人搜索照顾步行成员，第一处不合适时补查其他区域�
   await h.refreshCandidates();assert.ok(searches.length>1);assert.ok(searches[0][0]<113.05,'初始中心靠近可达范围较小的成员');
   assert.deepEqual(Array.from(h.state.candidates,s=>s.id),['good']);assert.equal(routes.filter(x=>x===store.location[0]).length,1,'一人超时即淘汰，跨区域不重复检查');assert.deepEqual(Array.from(h.state.candidates[0].times),[10,10]);
 });
-test('地图查询失败与严格预算无匹配分别提示，不误报为路程不符合',async()=>{
+test('地图查询失败与严格人均无匹配分别提示，不误报为路程不符合',async()=>{
   const broken=harness({nearby:async()=>{throw new Error('高德请求超时');}});await broken.refreshCandidates();assert.match(broken.state.searchMessage,/地图查询失败/);
   const budget=harness({nearby:async()=>[{id:'expensive',location:[113,23],price:100}],route:async()=>{throw new Error('不应查询路线');}});
-  budget.state.config.budget=50;await budget.refreshCandidates();assert.match(budget.state.searchMessage,/预算/);
+  budget.state.config.budget=50;await budget.refreshCandidates();assert.match(budget.state.searchMessage,/人均/);
 });
 test('多人核对超过旧 45 秒仍能完成全部成员路线，缺失路线仍不能入选',async()=>{
   let now=0;
