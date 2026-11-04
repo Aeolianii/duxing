@@ -7,6 +7,9 @@ const store={id:'amap-A',source:'amap',poiId:'A',name:'测试餐厅(南门店)',
 const source={title:store.name,url:'https://example.com/branch-a',summary:'测试餐厅(南门店)位于广州市南门路1号，主营粤菜。'};
 const model={matched:true,introduction:'这是一家粤菜餐厅。',selectionReason:'这家南门店主营粤菜，如果今天想尝试粤菜，可以把它作为这次用餐的一个选择。',reviewSummary:'暂无评价。',citations:[{index:0,quote:'主营粤菜'}]};
 const json=value=>new Response(JSON.stringify(value),{headers:{'Content-Type':'application/json'}});
+const completion=value=>json({choices:[{finish_reason:'stop',message:{content:JSON.stringify(value)}}]});
+const isSourceReview=body=>body.messages[0].content.startsWith('你只负责审核搜索来源');
+const directReview={assessments:[{index:0,relevance:'DIRECT_RELEVANT',quote:'测试餐厅(南门店)位于广州市南门路1号'}]};
 const deferred=()=>{let resolve;const promise=new Promise(r=>resolve=r);return {promise,resolve};};
 const tick=()=>new Promise(r=>setTimeout(r,5));
 
@@ -15,24 +18,24 @@ test('每店先搜索再整理，固定模型、真实来源、去重缓存且�
   const research=createResearch({config:{deepseekKey:'private-test-secret',deepseekModel:'deepseek-flash'},fetcher:async(url,options)=>{
     calls.push({url,body:JSON.parse(options.body)});
     assert.equal(options.headers.Authorization,'Bearer private-test-secret');
-    return json(url.endsWith('/search')?{results:[source]}:{choices:[{finish_reason:'stop',message:{content:JSON.stringify(model)}}]});
+    return url.endsWith('/search')?json({results:[source]}):completion(isSourceReview(JSON.parse(options.body))?directReview:model);
   }});
   const input={...store,origin:{location:[113,23]},visits:['私人反馈'],phone:'private-phone'};
   const [a,b]=await Promise.all([research(input),research(input)]);
   assert.deepEqual(a,b);assert.equal(a.status,'ready');assert.equal(a.evidence[0].url,source.url);
   assert.equal(a.selectionReason,model.selectionReason);
-  assert.equal(calls.length,2);assert.ok(calls[0].url.endsWith('/v1/tools/search'));
+  assert.equal(calls.length,3);assert.ok(calls[0].url.endsWith('/v1/tools/search'));
   assert.equal(calls[1].body.model,'deepseek-flash');assert.equal(calls[1].body.thinking.type,'disabled');
   assert.doesNotMatch(JSON.stringify(calls),/私人|private-phone|origin|location/);
-  await research(input);assert.equal(calls.length,2);
-  await research({...input,address:'广州市北门路2号'});assert.equal(calls.length,4);
+  await research(input);assert.equal(calls.length,3);
+  await research({...input,address:'广州市北门路2号'});assert.equal(calls.length,6);
 });
 
 test('空搜索不调用模型，非同店或伪造来源不当作可靠资料',async()=>{
   for(const output of [null,{...model,matched:false},{...model,citations:[{index:0,quote:'编造的证据'}]}]){
     let calls=0;
-    const research=createResearch({config:{deepseekKey:'test'},fetcher:async url=>{calls++;return json(url.endsWith('/search')?{results:output?[source]:[]}:{choices:[{finish_reason:'stop',message:{content:JSON.stringify(output)}}]});}});
-    const result=await research(store);assert.equal(result.status,'empty');assert.equal(result.selectionReason,'');assert.deepEqual(result.evidence,[]);assert.equal(calls,output?2:1);
+    const research=createResearch({config:{deepseekKey:'test'},fetcher:async(url,options)=>{calls++;return url.endsWith('/search')?json({results:output?[source]:[]}):completion(isSourceReview(JSON.parse(options.body))?directReview:output);}});
+    const result=await research(store);assert.equal(result.status,'empty');assert.equal(result.selectionReason,'');assert.deepEqual(result.evidence,[]);assert.equal(calls,output?3:1);
   }
 });
 
@@ -40,13 +43,45 @@ test('美食与游玩分别生成解读且缓存不会混用活动模式',async(
   const activities=[];
   const research=createResearch({config:{deepseekKey:'test'},fetcher:async(url,options)=>{
     if(url.endsWith('/search'))return json({results:[source]});
-    const body=JSON.parse(options.body),activity=JSON.parse(body.messages[1].content).store.activity;
+    const body=JSON.parse(options.body);
+    if(isSourceReview(body))return completion(directReview);
+    const activity=JSON.parse(body.messages[1].content).store.activity;
     activities.push(activity);
     return json({choices:[{finish_reason:'stop',message:{content:JSON.stringify({...model,selectionReason:activity==='play'?'游玩场馆解读':'美食门店解读'})}}]});
   }});
   assert.equal((await research({...store,activity:'food'})).selectionReason,'美食门店解读');
   assert.equal((await research({...store,activity:'play'})).selectionReason,'游玩场馆解读');
   await research({...store,activity:'play'});assert.deepEqual(activities,['food','play']);
+});
+
+test('只在名单中提到门店的赛事报道不参与总结或来源展示',async()=>{
+  const indirect={title:'电竞总决赛在广州落幕',url:'https://example.com/esports',summary:'活动联动陶陶居、茶月山等80多家门店推出套餐。'};
+  const direct={title:'茶月山门店介绍',url:'https://example.com/tea',summary:'茶月山是潮汕单丛茶饮品牌，提供多种单丛茶饮。'};
+  let summarySources;
+  const research=createResearch({config:{deepseekKey:'test'},fetcher:async(url,options)=>{
+    if(url.endsWith('/search'))return json({results:[direct,indirect]});
+    const body=JSON.parse(options.body);
+    if(isSourceReview(body))return completion({assessments:[
+      {index:0,relevance:'DIRECT_RELEVANT',quote:'茶月山是潮汕单丛茶饮品牌'},
+      {index:1,relevance:'INDIRECT_MENTION',quote:''}
+    ]});
+    summarySources=JSON.parse(body.messages[1].content).sources;
+    return completion({...model,citations:[{index:0,quote:'茶月山是潮汕单丛茶饮品牌'},{index:1,quote:'活动联动陶陶居、茶月山'}]});
+  }});
+  const result=await research(store);
+  assert.equal(result.status,'ready');
+  assert.deepEqual(summarySources.map(s=>s.url),[direct.url]);
+  assert.deepEqual(result.evidence.map(s=>s.url),[direct.url]);
+});
+
+test('来源审核没有直接相关证据时沿用空结果兜底',async()=>{
+  let calls=0;
+  const research=createResearch({config:{deepseekKey:'test'},fetcher:async(url)=>{
+    calls++;
+    return url.endsWith('/search')?json({results:[source]}):completion({assessments:[{index:0,relevance:'DIRECT_RELEVANT',quote:'并不存在的介绍'}]});
+  }});
+  const result=await research(store);
+  assert.equal(result.status,'empty');assert.deepEqual(result.evidence,[]);assert.equal(calls,2);
 });
 
 test('API 失败不泄露上游内容，错误可重试且不缓存',async()=>{

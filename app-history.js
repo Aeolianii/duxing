@@ -32,7 +32,7 @@
     const modal=dialog.open?{
       key:(dialog.querySelector('.modal-top h3')?.textContent||'')+':'+(dialog.querySelector('[data-store]')?.dataset.store||''),
       html:$('#modal-content .modal-inner')?.innerHTML||$('#modal-content').innerHTML,
-      fields:fields(dialog),scroll:dialog.scrollTop,last:state.last,won:state.detailWon,
+      fields:fields(dialog),scroll:$('#modal-content').scrollTop,last:state.last,won:state.detailWon,
       map:dialog.querySelector('#realMap')?{target:mapUI.target,draft:mapUI.draft,results:mapUI.results.slice(),html:$('#mapResults').innerHTML}:null,
       profile:dialog.querySelector('#currentUsername')?state.profileDraft:null,
       travelLast:travel.last,freeLast:freeWheel.last,travelInfo:travel.info,freeInfo:freeWheel.info
@@ -43,7 +43,7 @@
     if(applying||!entries[cursor])return;
     const current=entries[cursor],next=capture();
     // State may already have changed before render(), but the DOM is still the old screen.
-    if(current.modal&&dialog.open){current.modal.fields=fields(dialog);current.modal.scroll=dialog.scrollTop;current.modal.html=$('#modal-content .modal-inner')?.innerHTML||'';}
+    if(current.modal&&dialog.open){current.modal.fields=fields(dialog);current.modal.scroll=$('#modal-content').scrollTop;current.modal.html=$('#modal-content .modal-inner')?.innerHTML||'';}
     if(!current.modal){current.fields=fields($('#view'));current.scroll=window.scrollY;drafts.set(current.route.key,current.fields);}
     if(current.route.key===next.route.key){current.route=next.route;current.meal=next.meal;if(current.modal&&next.modal?.key===current.modal.key)current.modal=next.modal;}
     if(dialog.open&&current.modal&&dialog.querySelector('#visitForm,#currentUsername,#mapSearch'))modalDrafts.set(current.modal.key,current.modal);
@@ -113,7 +113,7 @@
         if(dialog.querySelector('#freeKnowledge')){$('#freeKnowledge').innerHTML=freeKnowledge();if(freeWheel.info?.status==='loading')researchFreeOption(freeWheel.last,freeWheel.round);}
         if(m.profile)$('#saveUsername').disabled=false;
       }
-      restoreFields(dialog,m.fields);dialog.scrollTop=m.scroll;
+      restoreFields(dialog,m.fields);$('#modal-content').scrollTop=m.scroll;
     }
     applying=false;
   }
