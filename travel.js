@@ -11,7 +11,6 @@ function travelAvailable(){return travel.candidates.filter(c=>!travel.noRepeat||
 function travelGo(stage){state.page='travel';travel.stage=stage;render();window.scrollTo({top:0});}
 function travelPhoto(city,extra=''){const photo=travel.photos.get(city.id);return `<div class="travel-photo ${extra}">${photo?.url?`<img src="${esc(photo.url)}" alt="${esc(city.name)} · ${esc(photo.name)}" referrerpolicy="no-referrer"><small>${esc(photo.name)} · 高德图片</small>`:`<img src="assets/travel.png" alt="旅行插画"><small>旅行插画 · 实景待查询</small>`}</div>`;}
 function renderTravel(){
-  $('#nav').innerHTML='';
   $('#view').innerHTML=`<div class="travel-nav"><button data-travel-stage="settings">旅行条件</button><button data-travel-stage="library">我的旅行${travel.plans.length?' · '+travel.plans.length:''}</button></div>`;
   if(travel.stage==='settings')renderTravelSettings();
   else if(travel.stage==='candidates')renderTravelCandidates();
