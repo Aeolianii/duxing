@@ -63,10 +63,17 @@ function cleanAuthor(input) {
   const avatar = source.avatar ? parseDataURL(source.avatar, LIMITS.avatarBytes) : null;
   return {name, avatar};
 }
+function cleanActualPrice(value) {
+  if(value==null||(typeof value==='string'&&!value.trim()))return null;
+  if(!['string','number'].includes(typeof value))throw fail(400,'请填写有效的人均金额');
+  const amount=Number(value),cents=Math.round(amount*100);
+  if(!Number.isFinite(amount)||amount<0||!Number.isSafeInteger(cents))throw fail(400,'请填写有效的人均金额');
+  return cents/100;
+}
 
 function toPublic(record, device) {
   return {
-    id: record.id, rating: record.rating, content: record.content, tags: record.tags.slice(),
+    id: record.id, rating: record.rating, content: record.content, tags: record.tags.slice(), actualPrice:record.actualPrice??null,
     images: record.images.map(name => '/uploads/' + name),
     author: {name: record.author.name, avatar: record.author.avatar ? '/uploads/' + record.author.avatar : ''},
     createdAt: record.createdAt, updatedAt: record.updatedAt || record.createdAt, likes: record.likedBy.length,
@@ -147,6 +154,7 @@ function createReviewStore({file, uploadDir, now = () => Date.now()} = {}) {
       const rating = Number(input.rating);
       if (!Number.isInteger(rating) || rating < 1 || rating > 5) throw fail(400, '评分需要 1 到 5 星');
       const content = cleanText(input.content, LIMITS.contentMin, LIMITS.contentMax, '评价内容');
+      const actualPrice=cleanActualPrice(input.actualPrice);
       const tags = cleanTags(input.tags, activity);
       const device = hashDevice(input.device);
       const author = cleanAuthor(input.author);
@@ -168,7 +176,7 @@ function createReviewStore({file, uploadDir, now = () => Date.now()} = {}) {
       const images = parsedImages.map((parsed, index) => writeImage(id, String(index + 1), parsed));
       const avatar = author.avatar ? writeImage(id, 'avatar', author.avatar) : '';
       const record = {
-        id, poiId, activity, rating, content, tags, images,
+        id, poiId, activity, rating, content, tags, images, actualPrice,
         poiName: typeof input.poiName === 'string' ? input.poiName.trim().slice(0, 80) : '',
         city: typeof input.city === 'string' ? input.city.trim().slice(0, 40) : '',
         address: typeof input.address === 'string' ? input.address.trim().slice(0, 160) : '',
@@ -188,6 +196,7 @@ function createReviewStore({file, uploadDir, now = () => Date.now()} = {}) {
       const rating=Number(input.rating);
       if(!Number.isInteger(rating)||rating<1||rating>5)throw fail(400,'评分需要 1 到 5 星');
       const content=cleanText(input.content,LIMITS.contentMin,LIMITS.contentMax,'评价内容');
+      const actualPrice=input.actualPrice===undefined?(record.actualPrice??null):cleanActualPrice(input.actualPrice);
       const tags=cleanTags(input.tags,record.activity),author=cleanAuthor(input.author);
       const keep=input.keepImages==null?record.images:input.keepImages;
       if(!Array.isArray(keep))throw fail(400,'保留图片格式无效');
@@ -200,7 +209,7 @@ function createReviewStore({file, uploadDir, now = () => Date.now()} = {}) {
       if(total>LIMITS.imagesTotal)throw fail(413,'图片总大小超出限制');
       const revision=crypto.randomUUID(),images=[...kept,...parsed.map((image,index)=>writeImage(revision,String(index+1),image))];
       const avatar=author.avatar?writeImage(revision,'avatar',author.avatar):record.author.avatar;
-      const next={...record,rating,content,tags,images,author:{name:author.name,avatar},updatedAt:new Date(now()).toISOString()};
+      const next={...record,rating,content,tags,images,actualPrice,author:{name:author.name,avatar},updatedAt:new Date(now()).toISOString()};
       const index=records.indexOf(record);records[index]=next;
       try{persist();}catch(error){records[index]=record;throw error;}
       return toPublic(next,device);

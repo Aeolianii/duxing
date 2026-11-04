@@ -262,9 +262,28 @@ test('HTTP PUT 更新自己的评价并重新计算站内平均分',async()=>{
   try{
     const update=body=>fetch(origin+'/api/reviews',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     assert.equal((await update({...base,reviewId:created.id,device:'device-not-owner'})).status,403);
-    const response=await update({...base,reviewId:created.id,rating:3,content:'更新后的评价内容。',keepImages:[]});
+    const response=await update({...base,reviewId:created.id,rating:3,content:'更新后的评价内容。',keepImages:[],actualPrice:36.5});
     assert.equal(response.status,200);assert.equal((await response.json()).id,created.id);
     const data=await (await fetch(origin+'/api/reviews?'+new URLSearchParams({poiId:base.poiId,device:base.device}))).json();
-    assert.equal(data.total,1);assert.equal(data.summary.average,3);assert.equal(data.myReview.rating,3);
+    assert.equal(data.total,1);assert.equal(data.summary.average,3);assert.equal(data.myReview.rating,3);assert.equal(data.reviews[0].actualPrice,36.5);
   }finally{await new Promise(resolve=>server.close(resolve));}
+});
+
+
+test('实际人均为可选公开字段：保留零金额、四舍五入且旧评价不补造金额',()=>{
+  const {store}=fresh();
+  const legacy=store.add({...base});assert.equal(legacy.actualPrice,null);
+  const priced=store.add({...base,poiId:'PRICE1',device:'device-price-111',actualPrice:'56.785'});
+  assert.equal(priced.actualPrice,56.79);
+  const publicView=store.list({poiId:'PRICE1'}).reviews[0];assert.equal(publicView.actualPrice,56.79);
+  const zero=store.update({...base,reviewId:priced.id,poiId:'PRICE1',device:'device-price-111',actualPrice:0});assert.equal(zero.actualPrice,0);
+  assert.equal(store.update({...base,reviewId:priced.id,poiId:'PRICE1',device:'device-price-111'}).actualPrice,0);
+  assert.equal(store.update({...base,reviewId:priced.id,poiId:'PRICE1',device:'device-price-111',actualPrice:null}).actualPrice,null);
+});
+test('公开人均拒绝负数和非法输入，不会覆盖已发布金额',()=>{
+  const {store}=fresh();const original=store.add({...base,actualPrice:18});
+  for(const actualPrice of [-1,'abc',Infinity,true,{},Number.MAX_VALUE]){
+    assert.throws(()=>store.update({...base,reviewId:original.id,actualPrice}),/人均金额/);
+  }
+  assert.equal(store.list({poiId:base.poiId}).reviews[0].actualPrice,18);
 });
