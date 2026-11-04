@@ -17,7 +17,7 @@ function originList(){return state.page==='fair'?state.people.map((p,i)=>({...p.
 function renderDiscovery(){
   if(state.stage==='loading')return renderGenerating();
   if(state.stage==='wheel'){
-    $('#view').innerHTML=`<div class="step-nav"><button id="backToMap">‹ 返回地图</button><span>② 转一转</span></div>`+((state.activity==='play')?heading('好玩已就位！','候选准备好了，按下开始揭晓这一场。'):heading('美味已就位！','候选准备好了，按下开始揭晓这一餐。'))+wheelPanel()+`<div class="under-wheel"><button id="openCandidates" class="candidate-entry"><span>${(state.activity==='play')?'🎡':'🍽️'}</span><strong>看看候选</strong><small>${available().length} 家</small><span>›</span></button><button id="refresh" class="refresh-entry">↻ 重新生成</button></div><p class="muted sheet-note">${state.live?((state.activity==='play')?'高德场馆与路线数据':'高德餐厅与路线数据'):'演示候选'} · 高评分更易入选，本轮候选等概率</p>`;
+    $('#view').innerHTML=`<div class="step-nav"><button id="backToMap">‹ 返回地图</button><span>② 转一转</span></div>`+((state.activity==='play')?heading('好玩已就位！','候选准备好了，按下开始揭晓这一场。'):heading('美味已就位！','候选准备好了，按下开始揭晓这一餐。'))+wheelPanel()+`<div class="under-wheel"><button id="openCandidates" class="candidate-entry"><span>${(state.activity==='play')?'🎡':'🍽️'}</span><strong>看看候选</strong><small>${available().length} 家</small><span>›</span></button><button id="refresh" class="refresh-entry">↻ 重新生成</button></div>`;
     return;
   }
   const group=state.page==='fair',c=state.config;
@@ -28,7 +28,7 @@ function renderDiscovery(){
   <p class="map-bottom-hint" id="mapHint" role="status">${group?'点击地图，调整当前成员的出发点':'点击地图选择出发点'}${state.live?'':' · 示意地图'}</p>
   <div class="origin-strip" id="originStrip">${originChips()}</div>
   ${state.searchMessage?`<p class="flow-error" role="status">${esc(state.searchMessage)}</p>`:''}
-  <button id="buildWheel" class="btn full build-wheel" ${state.checkingMap?'disabled':''}>生成转盘 <span aria-hidden="true">${decoration("star")}</span></button><p class="generation-note">${(state.activity==='play')?'先筛选场馆、核对路程，再去转盘揭晓':'先筛选餐厅、核对路程，再去转盘揭晓'}</p>`;
+  <button id="buildWheel" class="btn full build-wheel" ${state.checkingMap?'disabled':''}>生成转盘 <span aria-hidden="true">${decoration("star")}</span></button>`;
   if(state.live)mountHomeMap();else bindDemoHome();
 }
 function originChips(){
@@ -145,7 +145,7 @@ function openLocationMode(){const play=state.activity==='play';showModal(modalTo
 function returnToMap(){state.request++;state.loading=false;state.stage='map';state.searchMessage='';render();window.scrollTo({top:0});}
 function renderGenerating(){
   const progress=state.progress||{value:5,title:(state.activity==='play')?'正在寻找附近好玩…':'正在寻找附近美味…',detail:(state.activity==='play')?'先找场馆，再逐一确认路线':'先找餐厅，再逐一确认路线'};
-  $('#view').innerHTML=`<div class="step-nav"><button id="cancelGeneration">‹ 返回地图</button><span>准备你的转盘</span></div><section class="generation-screen"><div class="loading-plate">${(state.activity==='play')?'🎡':'🍜'}<span aria-hidden="true">${decoration("star")}</span></div><h1>${(state.activity==='play')?'好玩的，正在集合':'好吃的，正在集合'}</h1><p id="progressTitle">${esc(progress.title)}</p><div class="progress-track" role="progressbar" aria-label="生成转盘进度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${progress.value}"><div id="progressFill" style="width:${progress.value}%"></div></div><p id="progressDetail" class="muted">${esc(progress.detail)}</p><div class="loading-steps"><span>✓ 定好出发点</span><span>${(state.activity==='play')?'🎡 搜索场馆':'🍽 搜索餐厅'}</span><span>⌁ 核对路程</span></div><p class="muted">${state.live?'根据实际查询进度更新，不符合条件的店不会入选。':'演示模式，正在模拟候选生成。'}</p><button id="cancelGenerationBottom" class="btn outline sheet-note">取消，回地图调整</button></section>`;
+  $('#view').innerHTML=`<div class="step-nav"><button id="cancelGeneration">‹ 返回地图</button><span>准备你的转盘</span></div><section class="generation-screen"><div class="loading-plate">${(state.activity==='play')?'🎡':'🍜'}<span aria-hidden="true">${decoration("star")}</span></div><h1>${(state.activity==='play')?'好玩的，正在集合':'好吃的，正在集合'}</h1><p id="progressTitle">${esc(progress.title)}</p><div class="progress-track" role="progressbar" aria-label="生成转盘进度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${progress.value}"><div id="progressFill" style="width:${progress.value}%"></div></div><p id="progressDetail" class="muted">${esc(progress.detail)}</p><div class="loading-steps"><span>✓ 定好出发点</span><span>${(state.activity==='play')?'🎡 搜索场馆':'🍽 搜索餐厅'}</span><span>⌁ 核对路程</span></div><button id="cancelGenerationBottom" class="btn outline sheet-note">取消，回地图调整</button></section>`;
 }
 function updateProgress(value,title,detail){
   state.progress={value,title,detail};if(state.stage!=='loading')return;
