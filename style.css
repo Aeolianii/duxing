@@ -203,3 +203,6 @@ main:has(.map-stage) .icon-burst{font-size:37px;width:37px;height:37px;flex-basi
 
 /* Unified custom wheel: three entry methods and linked place rows. */
 .free-add-methods{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px}.free-add-methods .btn{flex:1 1 100px;font-size:12px;padding:10px 8px;white-space:nowrap}.free-list small,.free-favorite small{display:block;color:var(--muted);font-size:11px;line-height:1.6;margin-top:4px}.free-list .free-place-name{font-size:14px;color:var(--ink);text-align:left;min-height:30px;padding:0}.free-favorite{text-align:left;width:100%;flex-wrap:nowrap}.free-favorite>span:nth-child(2){flex:1;min-width:0}.free-favorite:disabled{opacity:.6}
+.trip-day-row{display:flex;align-items:center;gap:.6rem}.trip-day-row .travel-days{flex:1;min-width:0;overflow-x:auto}.trip-refresh{flex:none;border-radius:50%;width:44px;height:44px;padding:0;font-size:25px;line-height:1}
+#travelSettings [hidden]{display:none}
+.trip-sources{margin:1.5rem 0 .75rem;border-top:1px solid #dedbe4;padding-top:.75rem;color:#655876;font-size:.8rem;line-height:1.6}.trip-sources summary{cursor:pointer}.trip-sources ul{padding-left:1.25rem}.trip-sources li+li{margin-top:.35rem}.trip-sources a{color:#5b527e;text-decoration:underline;text-underline-offset:.15em;overflow-wrap:anywhere}.trip-sources a span{white-space:nowrap}

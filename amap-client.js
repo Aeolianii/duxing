@@ -141,7 +141,7 @@
       });
       await new Promise((resolve,reject) => {
         const timer=setTimeout(()=>reject(new Error('地图插件加载超时')),12000);
-        root.AMap.plugin(['AMap.PlaceSearch','AMap.Geocoder','AMap.Geolocation','AMap.Walking','AMap.Driving','AMap.Transfer'],()=>{clearTimeout(timer);resolve();});
+        root.AMap.plugin(['AMap.PlaceSearch','AMap.Geocoder','AMap.Geolocation','AMap.Walking','AMap.Riding','AMap.Driving','AMap.Transfer'],()=>{clearTimeout(timer);resolve();});
       });
       return root.AMap;
     })().catch(error => {sdkPromise=null; throw error;});
@@ -340,7 +340,7 @@
   }
   const routeCache=new Map(),routePending=new Map();
   async function route(from,to,mode,context={}) {
-    const key=JSON.stringify([from,to,mode,context.city||'',context.cityd||'']);
+    const key=JSON.stringify([from,to,mode,context.city||'',context.cityd||'',!!context.strictMode]);
     const cached=routeCache.get(key);
     if(!context.force&&cached&&Date.now()-cached.at<300000)return cached.minutes;
     if(routePending.has(key))return routePending.get(key);
@@ -365,10 +365,10 @@
       const minutes=transitMinutes(await call(done=>service.search(from,to,done)));
       // Nearby destinations often have no bus/subway plan. Check a real walking
       // route in that case; never turn missing route data into a zero-minute trip.
-      return minutes==null?route(from,to,'步行'):minutes;
+      return minutes==null&&!context.strictMode?route(from,to,'步行'):minutes;
     }
     await waitRouteSlot(mode);
-    const service = mode === '驾车' ? new A.Driving() : new A.Walking();
+    const service = mode === '驾车' ? new A.Driving() : mode==='骑行'?new A.Riding():new A.Walking();
     const result = await call(done => service.search(from,to,done));
     return routeMinutes(result);
   }

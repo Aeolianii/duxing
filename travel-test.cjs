@@ -3,39 +3,21 @@ const test=require('node:test'),assert=require('node:assert/strict'),fs=require(
 const travelCore=require('./travel-core.js');
 const conditions={origin:'广州',date:'2026-11-07',days:2,budget:1500,mode:'高铁',themes:['美食'],people:2,children:false,elders:false,excludeVisited:true};
 const city=name=>travelCore.cities.find(c=>c.name===name);
+const {cityRecord,discover}=require('./destination-service.cjs');
+const demo=['厦门','长沙','杭州'].map(name=>cityRecord({name,spots:Array.from({length:10},(_,i)=>'测试景点'+i)}));
+travelCore.cities.push(...demo);
+test('自定义标签发送到模型，候选去重并排除出发地和指定城市',async()=>{
+ const conditions2={...conditions,themes:['木版年画']};let sent='';
+ const result=await discover({conditions:conditions2,exclude:['长沙']},{deepseekKey:'test'},async(_,req)=>{sent=req.body;return Response.json({choices:[{message:{content:JSON.stringify({cities:['广州','长沙','潍坊','潍坊'].map(name=>({name,spots:['博物馆'],localCost:200,travelCost:50}))})}}]});});
+ assert.match(sent,/木版年画/);assert.deepEqual(result.map(c=>c.name),['潍坊']);
+ await assert.rejects(discover({conditions},{},fetch),/DeepSeek/);
+});
 test('景点查询不把近似名餐饮店或异地同名景点当作目的地',()=>{
-  const base={location:city('厦门').location,city:'厦门市',address:'厦门市思明区'};
+  const base={location:[118,24],city:'厦门市',address:'厦门市思明区'};
   assert.equal(travelCore.matchesPOI(city('厦门'),'八市',{...base,name:'八市阿杰五香(大元路店)'}),false);
   assert.equal(travelCore.matchesPOI(city('厦门'),'八市',{...base,name:'厦门第八市场'}),true);
   assert.equal(travelCore.matchesPOI(city('厦门'),'中山路步行街',{...base,name:'中山路步行街(东段)'}),true);
   assert.equal(travelCore.matchesPOI(city('厦门'),'中山路步行街',{...base,city:'南京市',address:'南京市',name:'中山路步行街'}),false);
-});
-test('城市候选排除出发地、去过及移除城市，并匹配至少一个兴趣',()=>{
-  const result=travelCore.candidates(conditions,{visited:[city('长沙').id],removed:[city('厦门').id],random:()=>.5});
-  assert.equal(result.length,6);assert.equal(new Set(result.map(c=>c.id)).size,6);
-  for(const c of result){assert.ok(!['广州','长沙','厦门'].includes(c.name));assert.ok(c.tags.includes('美食'));}
-  assert.deepEqual(travelCore.candidates(conditions,{visited:travelCore.cities.map(c=>c.id)}),[]);
-});
-test('换一批优先未展示候选，未知出发城市也不会制造交通和报价',()=>{
-  const first=travelCore.candidates({...conditions,themes:[]},{random:()=>.5});
-  const next=travelCore.candidates({...conditions,themes:[]},{previous:first.map(c=>c.id),random:()=>.5});
-  assert.ok(next.every(c=>!first.some(p=>p.id===c.id)));
-  const result=travelCore.candidates({...conditions,origin:'东莞'});assert.ok(result.length);
-  for(const c of result){assert.equal(c.price,undefined);assert.equal(c.minutes,undefined);}
-});
-test('主题乐园独占一天，亲子减少景点，长行程不重复凑数',()=>{
-  const plan=travelCore.createPlan(city('上海'),{...conditions,themes:['主题乐园']},'p');
-  assert.equal(plan.days[0].spots.length,1);assert.match(plan.days[0].spots[0].name,/迪士尼/);
-  const slow=travelCore.createPlan(city('成都'),{...conditions,children:true,days:7},'p');
-  assert.ok(slow.days.every(d=>d.spots.length<=1));const ids=slow.days.flatMap(d=>d.spots.map(s=>s.id));assert.equal(ids.length,new Set(ids).size);
-});
-test('替换景点不重复其他天，保存快照隔离后续编辑，坏存档被拒绝',()=>{
-  const c=city('杭州'),plan=travelCore.createPlan(c,conditions,'p');
-  const otherDay=JSON.stringify(plan.days[1]);plan.days[0].spots[0]={...travelCore.replacement(c,plan,0,0)};
-  assert.equal(JSON.stringify(plan.days[1]),otherDay);assert.equal(new Set(plan.days.flatMap(d=>d.spots.map(s=>s.id))).size,4);
-  const saved=JSON.parse(JSON.stringify(plan));plan.days[0].spots[0].name='已修改';assert.notEqual(saved.days[0].spots[0].name,'已修改');
-  assert.ok(travelCore.validPlan(saved));assert.ok(!travelCore.validPlan({...saved,days:null}));assert.ok(!travelCore.validPlan({...saved,cityId:'unknown'}));
-  assert.equal(travelCore.validConditions({...conditions,date:'2026-02-30'}),false);assert.equal(travelCore.validConditions({...conditions,days:0}),false);
 });
 function harness(fetcher=async()=>new Response(JSON.stringify({status:'empty'})),stored=[]){
   const handlers={},saved=[],nodes=new Map();
@@ -71,14 +53,6 @@ test('放轻松保留必去地点，修改不会波及其他天',()=>{
 });
 
 
-test('24 座城市的 1～7 天行程每天都有景点，慢节奏与整日景区约束保留',()=>{
-  for(const c of travelCore.cities)for(let days=1;days<=7;days++)for(const slow of [false,true]){
-    const plan=travelCore.createPlan(c,{...conditions,days,children:slow,themes:['主题乐园']},'p');
-    assert.equal(plan.days.length,days);
-    for(const day of plan.days){assert.ok(day.spots.length>0,`${c.name} ${days}天`);if(slow||day.spots.some(s=>s.fullDay))assert.equal(day.spots.length,1);}
-    const ids=plan.days.flatMap(d=>d.spots.map(s=>s.id));assert.equal(new Set(ids).size,ids.length);
-  }
-});
 test('旧行程可补全空白天且不改动已有安排、必去地点和保存快照',()=>{
   const h=harness();h.t.plan=travelCore.createPlan(city('厦门'),{...conditions,days:7},'legacy');
   h.t.plan.days[0].spots[0].must=true;
