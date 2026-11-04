@@ -31,11 +31,11 @@ test('每店先搜索再整理，固定模型、真实来源、去重缓存且�
   await research({...input,address:'广州市北门路2号'});assert.equal(calls.length,6);
 });
 
-test('空搜索不调用模型，非同店或伪造来源不当作可靠资料',async()=>{
+test('空搜索只补查一次，非同店或伪造来源不当作可靠资料',async()=>{
   for(const output of [null,{...model,matched:false},{...model,citations:[{index:0,quote:'编造的证据'}]}]){
     let calls=0;
     const research=createResearch({config:{deepseekKey:'test'},fetcher:async(url,options)=>{calls++;return url.endsWith('/search')?json({results:output?[source]:[]}):completion(isSourceReview(JSON.parse(options.body))?directReview:output);}});
-    const result=await research(store);assert.equal(result.status,'empty');assert.equal(result.selectionReason,'');assert.deepEqual(result.evidence,[]);assert.equal(calls,output?3:1);
+    const result=await research(store);assert.equal(result.status,'empty');assert.equal(result.selectionReason,'');assert.deepEqual(result.evidence,[]);assert.equal(calls,output?6:2);
   }
 });
 
@@ -81,7 +81,7 @@ test('来源审核没有直接相关证据时沿用空结果兜底',async()=>{
     return url.endsWith('/search')?json({results:[source]}):completion({assessments:[{index:0,relevance:'DIRECT_RELEVANT',quote:'并不存在的介绍'}]});
   }});
   const result=await research(store);
-  assert.equal(result.status,'empty');assert.deepEqual(result.evidence,[]);assert.equal(calls,2);
+  assert.equal(result.status,'empty');assert.deepEqual(result.evidence,[]);assert.equal(calls,4);
 });
 
 test('API 失败不泄露上游内容，错误可重试且不缓存',async()=>{
@@ -92,7 +92,7 @@ test('API 失败不泄露上游内容，错误可重试且不缓存',async()=>{
 
 test('本地 API 拒绝跨站、手工项、无效 JSON，且不暴露密钥',async()=>{
   let calls=0;
-  const server=createServer({config:{deepseekKey:'private-test-secret'},fetcher:async()=>{calls++;return json({results:[]});}});
+  const server=createServer({config:{deepseekKey:'private-test-secret'},traceStore:{record(){}},fetcher:async()=>{calls++;return json({results:[]});}});
   await new Promise(r=>server.listen(0,'127.0.0.1',r));const base='http://127.0.0.1:'+server.address().port;
   const post=(body,headers={})=>fetch(base+'/api/store-research',{method:'POST',headers:{'Content-Type':'application/json',...headers},body:JSON.stringify(body)});
   try{
@@ -104,13 +104,13 @@ test('本地 API 拒绝跨站、手工项、无效 JSON，且不暴露密钥',as
     assert.equal((await fetch(base+'/ai-service.cjs')).status,404);
     assert.equal((await fetch(base+'/api/store-research',{method:'POST',headers:{'Content-Type':'application/json'},body:'{'})).status,400);
     assert.equal(calls,0);
-    assert.equal((await post(store)).status,200);assert.equal(calls,1);
+    assert.equal((await post(store)).status,200);assert.equal(calls,2);
   }finally{await new Promise(r=>server.close(r));}
 });
 
 test('客户端复用正在搜索的同店任务和有效缓存，手工项不联网',async()=>{
   const gate=deferred();let calls=0,now=Date.now();
-  const client=createClient(async()=>{calls++;await gate.promise;return json({status:'empty',retrievedAt:new Date(now).toISOString()});},()=>now);
+  const client=createClient(async()=>{calls++;await gate.promise;return json({status:'ready',retrievedAt:new Date(now).toISOString()});},()=>now);
   const a=client.research({...store,location:[113,23],visits:['秘密']}),b=client.research(store);assert.equal(a,b);assert.equal(calls,1);
   gate.resolve();await a;await client.research(store);assert.equal(calls,1);
   assert.equal(await client.research({manual:true}),null);
@@ -197,7 +197,7 @@ test('结果理由展示真实 AI 段落、转义内容，并随当前路程变�
 
 test('通用转盘仅发送中奖名称，检索摘要后生成带来源的简要介绍',async()=>{
   const calls=[],summary='广州塔是广州的城市地标，可欣赏城市景观。';
-  const server=createServer({config:{deepseekKey:'test'},fetcher:async(url,options)=>{
+  const server=createServer({config:{deepseekKey:'test'},traceStore:{record(){}},fetcher:async(url,options)=>{
     const body=JSON.parse(options.body);calls.push(body);
     return json(url.endsWith('/search')?{results:[{title:'广州塔',url:'https://example.com/tower',summary}]}:{choices:[{finish_reason:'stop',message:{content:JSON.stringify({matched:true,introduction:summary,citations:[{index:0,quote:'广州塔是广州的城市地标'}]})}}]});
   }});

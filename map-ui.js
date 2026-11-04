@@ -201,8 +201,8 @@ async function prepareMerchantDetails(store,delay){
   if(store.source!=='amap'){if(!store.manual)await new Promise(resolve=>setTimeout(resolve,delay));return true;}
   const key=JSON.stringify([store.poiId,store.poiName||store.name,store.address,store.activity==='play'?'play':'food']);
   const hit=detailCache.get(key);
-  if(hit&&Date.now()-Date.parse(hit.ai?.retrievedAt)<900000){Object.assign(store,hit);return true;}
-  if(detailTasks.has(key)){const result=await detailTasks.get(key);Object.assign(store,result);return result.ai?.status!=='error';}
+  if(hit?.ai?.status==='ready'&&Date.now()-Date.parse(hit.ai.retrievedAt)<900000){Object.assign(store,hit);return true;}
+  if(detailTasks.has(key)){const result=await detailTasks.get(key);Object.assign(store,result);return result.ai?.status!=='error'&&!result.ai?.harness?.serviceUnavailable;}
   const task=(async()=>{
     const result={};store.ai={status:'loading'};
     await Promise.all([
@@ -221,13 +221,13 @@ async function prepareMerchantDetails(store,delay){
   })().finally(()=>detailTasks.delete(key));
   detailTasks.set(key,task);
   Object.assign(store,await task);
-  if(['ready','empty'].includes(store.ai?.status)){
+  if(store.ai?.status==='ready'){
     if(detailCache.size>=200)detailCache.delete(detailCache.keys().next().value);
     const fields=['photos','phone','rating','price','hours','hoursText','category','detailError','ai'];
     detailCache.set(key,Object.fromEntries(fields.filter(k=>store[k]!=null&&store[k]!==''&&(!Array.isArray(store[k])||store[k].length)).map(k=>[k,store[k]])));
   }
   if(state.candidates?.some(s=>s.id===store.id))state.catalog[store.id]=store;
-  return store.ai?.status!=='error';
+  return store.ai?.status!=='error'&&!store.ai?.harness?.serviceUnavailable;
 }
 function openRealRoute(store){
   const params=new URLSearchParams({position:store.location.join(','),name:store.name,src:'doux',coordinate:'gaode',callnative:'1'});

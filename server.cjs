@@ -3,6 +3,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const {createHash} = require('node:crypto');
 const {createResearch} = require('./ai-service.cjs');
+const {createTraceStore} = require('./ai-harness.cjs');
 const {createReviewStore} = require('./reviews.cjs');
 
 const DATA_DIR = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : path.join(__dirname, 'data');
@@ -39,8 +40,9 @@ async function readJson(req, limit) {
   }
 }
 
-function createServer({config = loadConfig(), fetcher = fetch, reviews, uploadsDir = path.join(DATA_DIR, 'uploads')} = {}) {
-  const research=createResearch({config,fetcher}),optionResearch=createResearch({config,fetcher,allowOptions:true});
+function createServer({config = loadConfig(), fetcher = fetch, reviews, uploadsDir = path.join(DATA_DIR, 'uploads'), traceStore = createTraceStore(path.join(DATA_DIR,'ai-traces.json'))} = {}) {
+  const onTrace=trace=>traceStore.record(trace);
+  const research=createResearch({config,fetcher,onTrace}),optionResearch=createResearch({config,fetcher,allowOptions:true,onTrace});
   const reviewStore = reviews || createReviewStore({file: path.join(DATA_DIR, 'reviews.json'), uploadDir: uploadsDir});
   const files = new Set(['index.html', 'style.css', 'app.js', 'core.js', 'amap-client.js', 'map-ui.js', 'discovery.js', 'ai-client.js', 'wheel-motion.js', 'app-history.js', 'freewheel.js','travel-core.js','travel.js', 'assets/food.webp', 'assets/play.webp', 'assets/travel.webp', 'assets/custom.webp','review-model.js','visit-picker.js','reviews.js']);
   const types = {'.html':'text/html; charset=utf-8', '.js':'application/javascript; charset=utf-8', '.css':'text/css; charset=utf-8', '.webp':'image/webp'};
@@ -59,7 +61,7 @@ function createServer({config = loadConfig(), fetcher = fetch, reviews, uploadsD
       try {
         const input = await readJson(req, 8192);
         return json(200, await (url.pathname==='/api/option-research'?optionResearch:research)(input));
-      } catch(error) { return json(error.status || 502,{error:error.status?error.message:'资料检索暂时失败，请重试'}); }
+      } catch(error) { return json(error.status || 502,{error:error.status?error.message:'资料检索暂时失败，请重试',...(error.harness?{harness:error.harness}:{})}); }
     }
     // 站内评价：列表走 GET，发布与点赞走 POST；图片与头像另存为文件，不塞进 JSON 存档。
     if (url.pathname === '/api/reviews' && req.method === 'GET') {

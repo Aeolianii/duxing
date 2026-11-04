@@ -116,6 +116,7 @@ function aiHTML(s){
   if(!ai)return '<p class="muted">正在准备地点介绍与资料来源…</p>';
   if(ai.status==='loading')return '<p class="muted" role="status">正在整理这个地点的介绍与资料来源，先看看基础信息…</p>';
   if(ai.status==='error')return `<p class="muted">${esc(ai.error)}</p><button class="btn secondary small" id="retryAI">重试资料</button>`;
+  if(ai.status==='empty')return '<p class="muted">暂未获取到可靠介绍，已保留地点基础信息，你可以稍后重新查询。</p><button class="btn secondary small" id="retryAI">重新查询资料</button>';
   const rawReview=typeof ai.reviewSummary==='string'?ai.reviewSummary.trim():'';
   const review=rawReview||'暂无相关评价。';
   return `<b>AI 整理 · ${esc(ai.model)}</b><p class="detail-copy"><b>介绍</b><br>${esc(ai.introduction||'暂无可核实的同店介绍。')}</p>${review?`<p class="detail-copy"><b>评价</b><br>${esc(review)}</p>`:''}<p class="muted">基于搜索摘要，资料有限；请核对具体分店。</p><div class="section-list">${(ai.evidence||[]).map(e=>`<a href="${esc(e.url)}" target="_blank" rel="noopener noreferrer">${esc(e.title||'查看来源')} ↗</a>`).join('')}</div>`;

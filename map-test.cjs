@@ -291,6 +291,21 @@ test('共享及缓存资料不会覆盖新路线或自定义显示名称',async(
   await h.prepareMerchantDetails(newer,0);assert.equal(calls,1);assert.equal(newer.max,5);
 });
 
+test('详情层不缓存空资料，服务故障降级会暂停后续后台任务且可重新查询',async()=>{
+  let queries=0;
+  const h=harness({details:async()=>({phone:'020-123'})});
+  h.DouxAI={research:async()=>{
+    queries++;
+    return {status:queries<=2?'empty':'ready',retrievedAt:new Date().toISOString(),harness:{serviceUnavailable:queries===1}};
+  }};
+  const store={id:'real',source:'amap',poiId:'A',name:'真实店',address:'地址',rating:4.6};
+  assert.equal(await h.prepareMerchantDetails(store,0),false);
+  assert.equal(store.rating,4.6);assert.equal(store.phone,'020-123');
+  assert.equal(await h.prepareMerchantDetails(store,0),true);
+  assert.equal(await h.prepareMerchantDetails(store,0),true);
+  await h.prepareMerchantDetails(store,0);assert.equal(queries,3);
+});
+
 test('详情空值保留已有评分、人均和图片，有效新值正常更新',()=>{
   const old={id:'amap-A',poiId:'A',name:'别名',poiName:'真实店',rating:4.6,price:80,photos:['https://example.com/photo.jpg'],phone:'123',location:[113,23]};
   const kept=adapter.mergeDetails(old,{id:'A',name:'真实店',biz_ext:{rating:[],cost:''},photos:[],tel:''});
