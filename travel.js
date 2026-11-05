@@ -10,7 +10,24 @@ function persistTravel(){return save('travel-live-v1',{cities:DouxTravel.cities,
 function destroyTravelMap(){travel.mapToken++;travel.map?.destroy();travel.map=null;}
 function travelAvailable(){return travel.candidates.filter(c=>!travel.noRepeat||!travel.drawn.has(c.id));}
 function travelGo(stage){state.page='travel';travel.stage=stage;render();window.scrollTo({top:0});}
-function travelPhoto(city,extra=''){const photo=travel.photos.get(city.id);return `<div class="travel-photo ${extra}">${photo?.url?`<img src="${esc(photo.url)}" alt="${esc(city.name)} · ${esc(photo.name)}" referrerpolicy="no-referrer"><small>${esc(photo.name)} · 高德图片</small>`:`<img src="assets/travel.webp" alt="旅行插画"><small>旅行插画 · 实景待查询</small>`}</div>`;}
+let travelCoverCatalog;
+function loadTravelCoverCatalog() {
+  if (!travelCoverCatalog) {
+    travelCoverCatalog = fetch('/api/travel/covers', {signal: AbortSignal.timeout(5000)})
+      .then(response => { if (!response.ok) throw Error('封面索引暂不可用'); return response.json(); })
+      .catch(() => { travelCoverCatalog = null; return {}; });
+  }
+  return travelCoverCatalog;
+}
+function travelPhoto(city, extra = '') {
+  const photo = travel.photos.get(city.id);
+  const credit = photo?.source
+    ? `<small><a href="${esc(photo.source)}" target="_blank" rel="noopener noreferrer" title="${esc(photo.name)}">摄影 · ${esc(photo.author)}</a> · <a href="${esc(photo.licenseURL)}" target="_blank" rel="noopener noreferrer">${esc(photo.license)}</a></small>`
+    : `<small>${esc(photo?.name || '')} · 高德图片</small>`;
+  return `<div class="travel-photo ${extra}">${photo?.url
+    ? `<img src="${esc(photo.url)}" alt="${esc(city.name)} · ${esc(photo.name)}" referrerpolicy="no-referrer">${credit}`
+    : '<img src="assets/travel.webp" alt="旅行插画"><small>旅行插画 · 实景待查询</small>'}</div>`;
+}
 function renderTravel(){
   $('#view').innerHTML=`<div class="travel-nav"><button data-travel-stage="settings">旅行条件</button><button data-travel-stage="library">我的旅行${travel.plans.length?' · '+travel.plans.length:''}</button></div>`;
   if(travel.stage==='settings')renderTravelSettings();
@@ -18,9 +35,10 @@ function renderTravel(){
   else if(travel.stage==='wheel')renderTravelWheel();
   else if(travel.stage==='plan'&&travel.plan)renderTravelPlan();
   else renderTravelLibrary();
-  if(['candidates','library'].includes(travel.stage))loadTravelPhotos();
+  if(['candidates','wheel','library'].includes(travel.stage))loadTravelPhotos();
 }
 function renderTravelSettings(){const c=travel.conditions;
+  void loadTravelCoverCatalog();
   $('#view').innerHTML+=`<div class="travel-intro"><div><h1>下一站，去哪儿？</h1><p>先想好怎么出发，<br>再把目的地交给一点好运。</p></div><img src="assets/travel.webp" alt=""></div><form id="travelSettings" class="travel-form"><label>从哪出发<div class="search-line"><input name="origin" id="travelOrigin" value="${esc(c.origin)}" list="originCityOptions" autocomplete="off" aria-describedby="originCityHint" placeholder="输入城市名称，如杭州" maxlength="30" required><button type="button" id="travelLocate" class="btn secondary small">定位</button></div></label><datalist id="originCityOptions"></datalist><small id="originCityHint" role="status"></small><div class="travel-fields"><label>出发日期<input type="date" name="date" value="${esc(c.date)}" min="${today()}" required></label><label>游玩天数<select name="days">${Array.from({length:7},(_,i)=>`<option value="${i+1}" ${c.days===i+1?'selected':''}>${i+1} 天</option>`).join('')}</select></label></div><div class="chips"><button type="button" data-travel-preset="2" class="chip">周末两天</button><button type="button" data-travel-preset="3" class="chip">三天小假期</button></div><label>人均总预算（元）<input type="number" name="budget" min="0" max="100000" step="50" value="${c.budget}" required><small>住宿、餐饮和门票均计入，可选择是否计入去程交通。0 表示不限。</small></label><label>抵达目的地的交通<select name="includeTransport"><option value="no">自行安排</option><option value="yes" ${c.includeTransport?'selected':''}>加入行程规划</option></select></label><div id="intercityOptions" ${c.includeTransport?'':'hidden'}><label>抵达交通类型<select name="mode">${['高铁','铁路','飞机','自驾'].map(m=>`<option ${c.mode===m?'selected':''}>${m}</option>`).join('')}</select></label><label id="driveBudgetField" ${c.mode==='自驾'?'':'hidden'}>人均去程自驾费用估算（元，可留空）<input type="number" name="driveBudget" min="0" value="${esc(String(c.driveBudget??''))}"></label><label><span><input type="checkbox" name="fareInBudget" ${c.fareInBudget!==false?'checked':''}> 去程费用计入人均总预算</span></label><small>有可售班次时，按去程报价和到达时刻安排游玩。返程可另查。</small></div><label>人均住宿预算（全程，已含在总预算内）<input type="number" min="0" max="100000" name="hotelBudget" value="${esc(String(c.hotelBudget??''))}" placeholder="留空按总预算的 35% 分配"></label><label>住宿房间数<input type="number" min="1" max="20" name="rooms" value="${esc(String(c.rooms??''))}" placeholder="留空按每两人一间"></label><label>市内出行<select name="localMode">${['公共交通','打车','步行','骑行','自驾'].map(m=>'<option '+(c.localMode===m?'selected':'')+'>'+m+'</option>').join('')}</select></label><fieldset><legend>想玩什么 <small>可多选</small></legend><div class="travel-interests">${DouxTravel.themes.map(t=>`<label><input type="checkbox" name="theme" value="${t}" ${c.themes.includes(t)?'checked':''}><span>${t}</span></label>`).join('')}</div></fieldset><label>自定义兴趣（逗号分隔）<input name="custom" maxlength="180" value="${esc((c.themes||[]).filter(t=>!DouxTravel.themes.includes(t)).join('，'))}"></label><details><summary>更多条件</summary><label class="sheet-note">同行人数<input type="number" name="people" value="${c.people}" min="1" max="20" required></label><div id="memberFields">${memberFields(c.people,c.members)}</div><div class="travel-checks"><label><input name="children" type="checkbox" ${c.children?'checked':''}>亲子出游</label><label><input name="elders" type="checkbox" ${c.elders?'checked':''}>长辈同行</label><label><input name="excludeVisited" type="checkbox" ${c.excludeVisited?'checked':''}>排除去过的城市</label></div><p class="muted">在“我的旅行”标记去过的地方。</p></details><button class="btn full" type="submit">看看有哪些目的地</button><p class="muted">DeepSeek 会按本次条件推荐目的地。具体交通、票价和住宿需另行查询。</p></form>`;
 }
 function travelSummary(c=travel.conditions){return `${esc(c.origin)}出发 · ${esc(c.date)} · ${c.days}天 · ${c.includeTransport===false?'仅规划市内行程':esc(c.mode)} · ${c.budget?'人均预算 ¥'+c.budget:'预算不限'}`;}
@@ -80,12 +98,56 @@ async function lookupTravelPOI(city,name){
   if(!state.mapConfigured)return null;
   const task=(async()=>{try{const query=name==='八市'&&city.name==='厦门'?'厦门第八市场':city.name+' '+name;const rows=await DouxMap.search(query);const poi=rows.find(p=>DouxTravel.matchesPOI(city,name,p));if(!poi)return null;poi.checkedAt=new Date().toLocaleString('zh-CN');travel.poi.set(key,poi);return poi;}catch{return null;}finally{travel.poiPending.delete(key);}})();travel.poiPending.set(key,task);return task;
 }
-async function loadTravelPhoto(city){
-  if(travel.photos.has(city.id)||!state.mapConfigured)return;
-  if(travel.photoPending.has(city.id))return travel.photoPending.get(city.id);
-  const task=(async()=>{let poi;for(const spot of city.spots.slice(0,2)){poi=await lookupTravelPOI(city,spot.name);if(poi?.photos?.[0])break;await wait(250);}if(poi?.photos?.[0]){travel.photos.set(city.id,{url:poi.photos[0],name:poi.name});document.querySelectorAll(`[data-city-photo="${city.id}"]`).forEach(node=>node.innerHTML=travelPhoto(city,node.closest('dialog')?'travel-hero-photo':''));}})().finally(()=>travel.photoPending.delete(city.id));travel.photoPending.set(city.id,task);return task;
+function preloadTravelImage(url) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    const timer = setTimeout(() => { image.src = ''; reject(Error('封面加载超时')); }, 12000);
+    image.referrerPolicy = 'no-referrer';
+    image.onload = () => { clearTimeout(timer); resolve(); };
+    image.onerror = () => { clearTimeout(timer); reject(Error('封面加载失败')); };
+    image.src = url;
+  });
 }
-async function loadTravelPhotos(){const stage=travel.stage;const list=stage==='candidates'?travel.candidates:travel.favorites.map(travelCity);for(const city of list){if(state.page!=='travel'||travel.stage!==stage||state.busy)break;await loadTravelPhoto(city);await wait(220);}}
+async function loadTravelPhoto(city) {
+  if (travel.photos.has(city.id)) return;
+  if (travel.photoPending.has(city.id)) return travel.photoPending.get(city.id);
+  const task = (async () => {
+    const catalog = await loadTravelCoverCatalog();
+    let photo = catalog[DouxTravel.normalize(city.name)];
+    if (photo) {
+      try { await preloadTravelImage(photo.url); } catch { photo = null; }
+    }
+    if (!photo && state.mapConfigured) {
+      for (const spot of city.spots.slice(0, 2)) {
+        const poi = await lookupTravelPOI(city, spot.name);
+        if (poi?.photos?.[0]) {
+          photo = {url: poi.photos[0], name: poi.name};
+          break;
+        }
+        await wait(250);
+      }
+      if (photo) await preloadTravelImage(photo.url);
+    }
+    if (!photo) return;
+    travel.photos.set(city.id, photo);
+    document.querySelectorAll(`[data-city-photo="${city.id}"]`).forEach(node => {
+      node.innerHTML = travelPhoto(city, node.closest('dialog') ? 'travel-hero-photo' : '');
+    });
+  })().catch(() => {}).finally(() => travel.photoPending.delete(city.id));
+  travel.photoPending.set(city.id, task);
+  return task;
+}
+async function loadTravelPhotos() {
+  const stage = travel.stage;
+  const list = stage === 'library' ? travel.favorites.map(travelCity).filter(Boolean) : travel.candidates;
+  let next = 0;
+  async function worker() {
+    while (next < list.length && state.page === 'travel' && travel.stage === stage) {
+      await loadTravelPhoto(list[next++]);
+    }
+  }
+  await Promise.all([worker(), worker()]);
+}
 async function mountTravelMap(){
   const token=travel.mapToken,p=travel.plan,index=travel.day,day=p.days[index],city=travelCity(p.cityId);
   const active=()=>token===travel.mapToken&&state.page==='travel'&&travel.stage==='plan'&&travel.plan===p&&travel.day===index&&!!$('#travelMap');
@@ -142,7 +204,7 @@ function handleTravelAction(button){const d=button.dataset;
   }return true;
 }
 function rememberTravelForm(){const form=$('#travelSettings');if(!form)return;const f=new FormData(form),c={origin:f.get('origin').trim(),date:f.get('date'),days:+f.get('days'),budget:+f.get('budget'),mode:f.get('mode'),themes:[...new Set([...f.getAll('theme'),...String(f.get('custom')||'').split(/[,，、]/).map(t=>t.trim()).filter(Boolean)])],people:+f.get('people'),children:f.has('children'),elders:f.has('elders'),excludeVisited:f.has('excludeVisited')};if(c.origin===travel.conditions.origin&&travel.conditions.originPoint)c.originPoint=travel.conditions.originPoint;c.driveBudget=f.get('driveBudget')?Number(f.get('driveBudget')):null;form.querySelector('#driveBudgetField').hidden=c.mode!=='自驾';c.includeTransport=f.get('includeTransport')==='yes';c.fareInBudget=c.includeTransport&&f.has('fareInBudget');if(!c.includeTransport)c.mode='不限';form.querySelector('#intercityOptions').hidden=!c.includeTransport;c.hotelBudget=f.get("hotelBudget")?Number(f.get("hotelBudget")):null;c.rooms=f.get("rooms")?Number(f.get("rooms")):null;c.localMode=f.get("localMode");c.members=Array.from({length:Math.min(20,c.people)},(_,i)=>({tags:f.getAll("tags"+i),custom:f.get("memberCustom"+i)||"",ticket:f.get("ticket"+i)||"全价票"}));travel.conditions=c;}
-async function locateTravel(){const input=$('#travelOrigin'),button=$('#travelLocate');if(!state.mapConfigured)return toast('定位暂不可用，请手动填写出发城市');button.disabled=true;button.textContent='定位中…';try{const point=await DouxMap.locate();const city=await DouxMap.cityAt(point.location);if(input.isConnected){input.setCustomValidity('');input.value=DouxTravel.normalize(city);suggestOrigins(input);rememberTravelForm();travel.conditions.originPoint=point.location;}}catch{toast('定位失败或未授权，请手动填写出发城市');}finally{if(button.isConnected){button.disabled=false;button.textContent='定位';}}}
+async function locateTravel(){const input=$('#travelOrigin'),button=$('#travelLocate');if(!state.mapConfigured)return toast('定位暂不可用，请手动填写出发城市');button.disabled=true;button.textContent='定位中…';try{const point=await DouxMap.locate();const city=await DouxMap.cityAt(point.location);if(input.isConnected){input.setCustomValidity('');input.value=DouxTravel.normalize(city);suggestOrigins(input);rememberTravelForm();travel.conditions.originPoint=point.location;}}catch(error){toast(error.message || '定位失败，请手动填写出发城市');}finally{if(button.isConnected){button.disabled=false;button.textContent='定位';}}}
 document.addEventListener('input',event=>{if(event.target.closest('#travelSettings'))rememberTravelForm();});
 document.addEventListener('change',event=>{const t=event.target;if(t.id==='travelNoRepeat'){travel.noRepeat=t.checked;render();}if(t.dataset.travelCheck!==undefined){travel.plan.checklist[t.dataset.travelCheck]=t.checked;markTravelDirty();}if(t.dataset.travelVisited){if(!t.checked&&state.visits?.some(v=>v.activity==='travel'&&v.storeId===t.dataset.travelVisited)){t.checked=true;toast('这个城市有旅游足迹，请在足迹中编辑或删除记录');return;}const old=travel.visited;travel.visited=t.checked?[...new Set([...old,t.dataset.travelVisited])]:old.filter(id=>id!==t.dataset.travelVisited);if(!persistTravel()){travel.visited=old;t.checked=!t.checked;}}});
 document.addEventListener('submit',async event=>{const form=event.target;

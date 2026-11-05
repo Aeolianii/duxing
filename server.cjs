@@ -45,7 +45,11 @@ function createServer({config = loadConfig(), fetcher = fetch, reviews, uploadsD
   const research=createResearch({config,fetcher,onTrace}),optionResearch=createResearch({config,fetcher,allowOptions:true,onTrace});
   const reviewStore = reviews || createReviewStore({file: path.join(DATA_DIR, 'reviews.json'), uploadDir: uploadsDir});
   const files = new Set(['index.html', 'style.css', 'app.js', 'core.js', 'amap-client.js', 'map-ui.js', 'discovery.js', 'ai-client.js', 'wheel-motion.js', 'app-history.js', 'freewheel.js','travel-core.js','travel.js', 'assets/food.webp', 'assets/play.webp', 'assets/travel.webp', 'assets/custom.webp','review-model.js','visit-picker.js','reviews.js']);
-  const types = {'.html':'text/html; charset=utf-8', '.js':'application/javascript; charset=utf-8', '.css':'text/css; charset=utf-8', '.webp':'image/webp'};
+  const cityCovers = require('./city-covers.json');
+  for (const cover of Object.values(cityCovers)) {
+    if (/^\/assets\/cities\/[a-f0-9]{24}\.(jpg|png|webp)$/.test(cover.url)) files.add(cover.url.slice(1));
+  }
+  const types = {'.html':'text/html; charset=utf-8', '.js':'application/javascript; charset=utf-8', '.css':'text/css; charset=utf-8', '.webp':'image/webp', '.jpg':'image/jpeg', '.png':'image/png'};
   const uploadTypes = {'.jpg':'image/jpeg', '.png':'image/png', '.webp':'image/webp'};
   return http.createServer(async (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
@@ -53,10 +57,14 @@ function createServer({config = loadConfig(), fetcher = fetch, reviews, uploadsD
     res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
     const json = (status, data) => {res.writeHead(status, {'Content-Type':'application/json; charset=utf-8'}); res.end(JSON.stringify(data));};
     if (LOCAL_ONLY && !/^(127\.0\.0\.1|localhost)(:\d+)?$/.test(req.headers.host || '')) return json(403, {error:'仅允许本机访问'});
-    if (req.headers['sec-fetch-site'] === 'cross-site') return json(403, {error:'不允许跨站请求'});
-    if (req.headers.origin && req.headers.origin !== `http://${req.headers.host}`) return json(403, {error:'不允许跨站请求'});
     let url;
     try { url = new URL(req.url, 'http://localhost'); } catch { return json(400, {error:'请求地址无效'}); }
+    const publicHome = req.method === 'GET' && (url.pathname === '/' || url.pathname === '/index.html');
+    if (!publicHome) {
+      if (req.headers['sec-fetch-site'] === 'cross-site') return json(403, {error:'不允许跨站请求'});
+      const proxyHttps = ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(req.socket.remoteAddress) && req.headers['x-forwarded-proto'] === 'https';
+      if (req.headers.origin && req.headers.origin !== `${proxyHttps ? 'https' : 'http'}://${req.headers.host}`) return json(403, {error:'不允许跨站请求'});
+    }
     const travelRoute=/^\/api\/travel\/(discover|plan|quote|reviews)$/.exec(url.pathname);
     if(travelRoute && req.method==='POST'){
       if(!/^application\/json(?:;|$)/i.test(req.headers['content-type']||''))return json(415,{error:'请使用 JSON'});
@@ -95,6 +103,10 @@ function createServer({config = loadConfig(), fetcher = fetch, reviews, uploadsD
     }
     if (req.method !== 'GET') return json(405, {error:'不支持的请求方法'});
     if (url.pathname === '/api/ai-config') return json(200,{configured:Boolean(config.deepseekKey),model:config.deepseekModel || 'deepseek-flash'});
+    if (url.pathname === '/api/travel/covers') {
+      res.setHeader('Cache-Control', 'public, max-age=3600');
+      return json(200, cityCovers);
+    }
     const configured = Boolean(config.key && config.security);
     if (url.pathname === '/api/map-config') return json(200, {configured, key:configured ? config.key : ''});
     if (url.pathname.startsWith('/uploads/')) {
@@ -135,7 +147,7 @@ function createServer({config = loadConfig(), fetcher = fetch, reviews, uploadsD
       // Revalidate code on every visit; illustrations may be reused for an hour.
       // Content hashes also detect edits made within the same filesystem timestamp.
       const etag = '"'+createHash('sha256').update(body).digest('hex').slice(0,24)+'"';
-      res.setHeader('Cache-Control', name.startsWith('assets/') ? 'public, max-age=3600' : 'public, max-age=0, must-revalidate');
+      res.setHeader('Cache-Control', name.startsWith('assets/cities/') ? 'public, max-age=31536000, immutable' : name.startsWith('assets/') ? 'public, max-age=3600' : 'public, max-age=0, must-revalidate');
       res.setHeader('ETag', etag);
       const tags=(req.headers['if-none-match'] || '').split(',').map(value=>value.trim().replace(/^W\//,''));
       if(tags.includes(etag)||tags.includes('*')) {res.writeHead(304);return res.end();}

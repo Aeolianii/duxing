@@ -384,6 +384,9 @@
     return next;
   }
   async function locate() {
+    if (root.isSecureContext === false) {
+      throw new Error('手机定位需要 HTTPS，请使用 HTTPS 地址或在地图上选点');
+    }
     const A=await load();
     const result=await call(done=>new A.Geolocation({enableHighAccuracy:true,timeout:10000,convert:true}).getCurrentPosition(done));
     const point=coordinates(result?.position);

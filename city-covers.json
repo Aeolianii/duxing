@@ -1,0 +1,250 @@
+{
+  "杭州": {
+    "url": "/assets/cities/c3fe5d52136f18860956d582.jpg",
+    "name": "20260825从钱塘江上空鸟瞰钱江新城.jpg",
+    "author": "MasaneMiyaPA",
+    "license": "CC BY-SA 4.0",
+    "licenseURL": "https://creativecommons.org/licenses/by-sa/4.0",
+    "source": "https://commons.wikimedia.org/wiki/File:20260825%E4%BB%8E%E9%92%B1%E5%A1%98%E6%B1%9F%E4%B8%8A%E7%A9%BA%E9%B8%9F%E7%9E%B0%E9%92%B1%E6%B1%9F%E6%96%B0%E5%9F%8E.jpg"
+  },
+  "上海": {
+    "url": "/assets/cities/5bb097770afda9f02c75f8dd.jpg",
+    "name": "Pudong_Shanghai_November_2017_panorama.jpg",
+    "author": "King of Hearts",
+    "license": "CC BY-SA 4.0",
+    "licenseURL": "https://creativecommons.org/licenses/by-sa/4.0",
+    "source": "https://commons.wikimedia.org/wiki/File:Pudong_Shanghai_November_2017_panorama.jpg"
+  },
+  "北京": {
+    "url": "/assets/cities/ff581a8a9a57e40666a8c051.jpg",
+    "name": "Skyline_of_Beijing_CBD_with_B-5906_approaching_(20211016171955)_(1).jpg",
+    "author": "N509FZ",
+    "license": "CC BY 4.0",
+    "licenseURL": "https://creativecommons.org/licenses/by/4.0",
+    "source": "https://commons.wikimedia.org/wiki/File:Skyline_of_Beijing_CBD_with_B-5906_approaching_(20211016171955)_(1).jpg"
+  },
+  "广州": {
+    "url": "/assets/cities/c101877a644c7d097ad8427b.jpg",
+    "name": "Canton_Tower_20241027.jpg",
+    "author": "Tim Wu",
+    "license": "CC BY-SA 4.0",
+    "licenseURL": "https://creativecommons.org/licenses/by-sa/4.0",
+    "source": "https://commons.wikimedia.org/wiki/File:Canton_Tower_20241027.jpg"
+  },
+  "深圳": {
+    "url": "/assets/cities/de2d15ef555f2865a095a7fc.jpg",
+    "name": "市民中心_20230725(edit).jpg",
+    "author": "Auongkinghe",
+    "license": "CC BY-SA 4.0",
+    "licenseURL": "https://creativecommons.org/licenses/by-sa/4.0",
+    "source": "https://commons.wikimedia.org/wiki/File:%E5%B8%82%E6%B0%91%E4%B8%AD%E5%BF%83_20230725(edit).jpg"
+  },
+  "成都": {
+    "url": "/assets/cities/d34e8b09e316cb2939754f7d.jpg",
+    "name": "雪山下的成都市天际线_Chengdu_skyline_with_snow_capped_mountains.jpg",
+    "author": "FISU",
+    "license": "CC BY 3.0",
+    "licenseURL": "https://creativecommons.org/licenses/by/3.0",
+    "source": "https://commons.wikimedia.org/wiki/File:%E9%9B%AA%E5%B1%B1%E4%B8%8B%E7%9A%84%E6%88%90%E9%83%BD%E5%B8%82%E5%A4%A9%E9%99%85%E7%BA%BF_Chengdu_skyline_with_snow_capped_mountains.jpg"
+  },
+  "重庆": {
+    "url": "/assets/cities/b4e56420ef066f4721cf737f.jpg",
+    "name": "Chongqing_Nightscape.jpg",
+    "author": "Jay Huang",
+    "license": "CC BY 2.0",
+    "licenseURL": "https://creativecommons.org/licenses/by/2.0",
+    "source": "https://commons.wikimedia.org/wiki/File:Chongqing_Nightscape.jpg"
+  },
+  "西安": {
+    "url": "/assets/cities/eb2a274b4598561c30fc3c2a.jpg",
+    "name": "西安钟楼2020_(1).jpg",
+    "author": "ScareCriterion12",
+    "license": "CC BY-SA 4.0",
+    "licenseURL": "https://creativecommons.org/licenses/by-sa/4.0",
+    "source": "https://commons.wikimedia.org/wiki/File:%E8%A5%BF%E5%AE%89%E9%92%9F%E6%A5%BC2020_(1).jpg"
+  },
+  "南京": {
+    "url": "/assets/cities/1ab21ee6df12b653626513f8.jpg",
+    "name": "南京总统府西花厅2024.3.jpg",
+    "author": "ScareCriterion12",
+    "license": "CC0",
+    "licenseURL": "http://creativecommons.org/publicdomain/zero/1.0/deed.en",
+    "source": "https://commons.wikimedia.org/wiki/File:%E5%8D%97%E4%BA%AC%E6%80%BB%E7%BB%9F%E5%BA%9C%E8%A5%BF%E8%8A%B1%E5%8E%852024.3.jpg"
+  },
+  "苏州": {
+    "url": "/assets/cities/4547c50c51c06d684f59b4d4.jpg",
+    "name": "东方之门1.jpg",
+    "author": "铁头娃蛤蛤",
+    "license": "CC BY-SA 4.0",
+    "licenseURL": "https://creativecommons.org/licenses/by-sa/4.0",
+    "source": "https://commons.wikimedia.org/wiki/File:%E4%B8%9C%E6%96%B9%E4%B9%8B%E9%97%A81.jpg"
+  },
+  "厦门": {
+    "url": "/assets/cities/23313ae34d4ef481d9846194.jpg",
+    "name": "Xiamen_night_cityscape_2018_-_Flickr_-_Jaykhuang.jpg",
+    "author": "Jay Huang from Pleasanton, USA",
+    "license": "CC BY 2.0",
+    "licenseURL": "https://creativecommons.org/licenses/by/2.0",
+    "source": "https://commons.wikimedia.org/wiki/File:Xiamen_night_cityscape_2018_-_Flickr_-_Jaykhuang.jpg"
+  },
+  "长沙": {
+    "url": "/assets/cities/6ebf890853df8ea8fb166abf.jpg",
+    "name": "爱晚亭（秋-侧面）.jpg",
+    "author": "Junchong",
+    "license": "CC BY-SA 4.0",
+    "licenseURL": "https://creativecommons.org/licenses/by-sa/4.0",
+    "source": "https://commons.wikimedia.org/wiki/File:%E7%88%B1%E6%99%9A%E4%BA%AD%EF%BC%88%E7%A7%8B-%E4%BE%A7%E9%9D%A2%EF%BC%89.jpg"
+  },
+  "武汉": {
+    "url": "/assets/cities/d3d0c04ae99c5d3213468e35.jpg",
+    "name": "Revolution_of_1911_Museum.jpg",
+    "author": "Doraemon.tvb",
+    "license": "CC BY-SA 3.0",
+    "licenseURL": "https://creativecommons.org/licenses/by-sa/3.0",
+    "source": "https://commons.wikimedia.org/wiki/File:Revolution_of_1911_Museum.jpg"
+  },
+  "青岛": {
+    "url": "/assets/cities/609735bb3532c859a1aad90d.jpg",
+    "name": "Qingdao_(31424840488).jpg",
+    "author": "Dan Nevill from Seattle, WA, United States",
+    "license": "CC BY 2.0",
+    "licenseURL": "https://creativecommons.org/licenses/by/2.0",
+    "source": "https://commons.wikimedia.org/wiki/File:Qingdao_(31424840488).jpg"
+  },
+  "大连": {
+    "url": "/assets/cities/403e16fb987af6e3186b6290.jpg",
+    "name": "Xigang,_Dalian,_Liaoning,_China_-_panoramio_(18).jpg",
+    "author": "Fumihiko Ueno",
+    "license": "CC BY 3.0",
+    "licenseURL": "https://creativecommons.org/licenses/by/3.0",
+    "source": "https://commons.wikimedia.org/wiki/File:Xigang,_Dalian,_Liaoning,_China_-_panoramio_(18).jpg"
+  },
+  "天津": {
+    "url": "/assets/cities/26eb0f2b940dd23a663ba4ab.jpg",
+    "name": "Tianjin_Eye_and_Tianjin.jpg",
+    "author": "KangTyngrwey",
+    "license": "CC BY-SA 4.0",
+    "licenseURL": "https://creativecommons.org/licenses/by-sa/4.0",
+    "source": "https://commons.wikimedia.org/wiki/File:Tianjin_Eye_and_Tianjin.jpg"
+  },
+  "昆明": {
+    "url": "/assets/cities/8e45c603385ad8e460c411b4.jpg",
+    "name": "五华区与盘龙区天际线_-_航拍_-_2025-05-16_03.jpg",
+    "author": "瑞丽江的河水",
+    "license": "CC BY-SA 4.0",
+    "licenseURL": "https://creativecommons.org/licenses/by-sa/4.0",
+    "source": "https://commons.wikimedia.org/wiki/File:%E4%BA%94%E5%8D%8E%E5%8C%BA%E4%B8%8E%E7%9B%98%E9%BE%99%E5%8C%BA%E5%A4%A9%E9%99%85%E7%BA%BF_-_%E8%88%AA%E6%8B%8D_-_2025-05-16_03.jpg"
+  },
+  "贵阳": {
+    "url": "/assets/cities/c63eb56e5520fd5ccd8c84b3.jpg",
+    "name": "Guizhou_Financial_City_District.jpg",
+    "author": "Ryedamien",
+    "license": "CC BY-SA 4.0",
+    "licenseURL": "https://creativecommons.org/licenses/by-sa/4.0",
+    "source": "https://commons.wikimedia.org/wiki/File:Guizhou_Financial_City_District.jpg"
+  },
+  "桂林": {
+    "url": "/assets/cities/ed4cf8b18349ee644bd1629d.jpg",
+    "name": "Xiangshan_Scenic_Area_89468-Guilin_(31130832628).jpg",
+    "author": "xiquinhosilva",
+    "license": "CC BY 2.0",
+    "licenseURL": "https://creativecommons.org/licenses/by/2.0",
+    "source": "https://commons.wikimedia.org/wiki/File:Xiangshan_Scenic_Area_89468-Guilin_(31130832628).jpg"
+  },
+  "三亚": {
+    "url": "/assets/cities/abd307c4c41db5ab61b9af5e.jpg",
+    "name": "SuperStar_Aquarius_at_Phoenix_Island,_Sanya_Bay_-_01.jpg",
+    "author": "Anna Frodesiak",
+    "license": "CC0",
+    "licenseURL": "http://creativecommons.org/publicdomain/zero/1.0/deed.en",
+    "source": "https://commons.wikimedia.org/wiki/File:SuperStar_Aquarius_at_Phoenix_Island,_Sanya_Bay_-_01.jpg"
+  },
+  "海口": {
+    "url": "/assets/cities/60dd1ad56bf23080076ff6f1.jpg",
+    "name": "Altstadt_von_Haikou_(Hainan).jpg",
+    "author": "Yolanda Yao",
+    "license": "CC BY-SA 4.0",
+    "licenseURL": "https://creativecommons.org/licenses/by-sa/4.0",
+    "source": "https://commons.wikimedia.org/wiki/File:Altstadt_von_Haikou_(Hainan).jpg"
+  },
+  "福州": {
+    "url": "/assets/cities/5cc7bad3d4414b9bf48c1439.jpg",
+    "name": "Fuzhou_Taixi_CBD.jpg",
+    "author": "Listwiseafford",
+    "license": "CC BY-SA 4.0",
+    "licenseURL": "https://creativecommons.org/licenses/by-sa/4.0",
+    "source": "https://commons.wikimedia.org/wiki/File:Fuzhou_Taixi_CBD.jpg"
+  },
+  "泉州": {
+    "url": "/assets/cities/0d50767eb603e233a1cfbb34.jpg",
+    "name": "20230130_Old_City_of_Quanzhou_01.jpg",
+    "author": "Windmemories",
+    "license": "CC BY-SA 4.0",
+    "licenseURL": "https://creativecommons.org/licenses/by-sa/4.0",
+    "source": "https://commons.wikimedia.org/wiki/File:20230130_Old_City_of_Quanzhou_01.jpg"
+  },
+  "宁波": {
+    "url": "/assets/cities/698f641004f92278d593bae0.jpg",
+    "name": "Ningbo_City_God_Temple,_2021-10-23_06.jpg",
+    "author": "Siyuwj",
+    "license": "CC BY-SA 4.0",
+    "licenseURL": "https://creativecommons.org/licenses/by-sa/4.0",
+    "source": "https://commons.wikimedia.org/wiki/File:Ningbo_City_God_Temple,_2021-10-23_06.jpg"
+  },
+  "绍兴": {
+    "url": "/assets/cities/b0194acb6da495e21914b2ca.jpg",
+    "name": "Guazhu_Hu.jpg",
+    "author": "Yumeto",
+    "license": "CC BY-SA 4.0",
+    "licenseURL": "https://creativecommons.org/licenses/by-sa/4.0",
+    "source": "https://commons.wikimedia.org/wiki/File:Guazhu_Hu.jpg"
+  },
+  "扬州": {
+    "url": "/assets/cities/31aee048a2fc8600c7261f4a.jpg",
+    "name": "Five_Pavilion_Bridge_and_White_Pagoda_2017.jpg",
+    "author": "Amarespeco",
+    "license": "CC BY-SA 4.0",
+    "licenseURL": "https://creativecommons.org/licenses/by-sa/4.0",
+    "source": "https://commons.wikimedia.org/wiki/File:Five_Pavilion_Bridge_and_White_Pagoda_2017.jpg"
+  },
+  "黄山": {
+    "url": "/assets/cities/c7adea8b1a5baa09baabe103.jpg",
+    "name": "Anhui_Huangshan.jpg",
+    "author": "Miaulian",
+    "license": "CC BY-SA 3.0",
+    "licenseURL": "https://creativecommons.org/licenses/by-sa/3.0",
+    "source": "https://commons.wikimedia.org/wiki/File:Anhui_Huangshan.jpg"
+  },
+  "洛阳": {
+    "url": "/assets/cities/ad61cdbdb12540f10d645725.jpg",
+    "name": "20231119_Yingtian_Gate_02.jpg",
+    "author": "Windmemories",
+    "license": "CC BY-SA 4.0",
+    "licenseURL": "https://creativecommons.org/licenses/by-sa/4.0",
+    "source": "https://commons.wikimedia.org/wiki/File:20231119_Yingtian_Gate_02.jpg"
+  },
+  "大理": {
+    "url": "/assets/cities/7670137ce2bd9068e7317409.jpg",
+    "name": "Chongsheng_Temple_(11050634113).jpg",
+    "author": "Andrew and Annemarie",
+    "license": "CC BY-SA 2.0",
+    "licenseURL": "https://creativecommons.org/licenses/by-sa/2.0",
+    "source": "https://commons.wikimedia.org/wiki/File:Chongsheng_Temple_(11050634113).jpg"
+  },
+  "丽江": {
+    "url": "/assets/cities/66f90b5823c906e59cb24525.jpg",
+    "name": "Black_Dragon_黑龙潭_(5496141333).jpg",
+    "author": "Miltos Gikas from Lutsa, Attiki, Greece",
+    "license": "CC BY 2.0",
+    "licenseURL": "https://creativecommons.org/licenses/by/2.0",
+    "source": "https://commons.wikimedia.org/wiki/File:Black_Dragon_%E9%BB%91%E9%BE%99%E6%BD%AD_(5496141333).jpg"
+  },
+  "珠海": {
+    "url": "/assets/cities/108652434e106d4753959c92.jpg",
+    "name": "从凤凰山远眺珠海主城区.jpg",
+    "author": "Chinyen Lu",
+    "license": "CC BY-SA 4.0",
+    "licenseURL": "https://creativecommons.org/licenses/by-sa/4.0",
+    "source": "https://commons.wikimedia.org/wiki/File:%E4%BB%8E%E5%87%A4%E5%87%B0%E5%B1%B1%E8%BF%9C%E7%9C%BA%E7%8F%A0%E6%B5%B7%E4%B8%BB%E5%9F%8E%E5%8C%BA.jpg"
+  }
+}

@@ -242,3 +242,10 @@ node --test visit-picker-test.cjs
 ### 个性化旅游规划
 在旅行条件的「更多条件」中选择每位成员的兴趣及票种。选定目的地并生成草稿后，点击「用 DeepSeek 规划每日行程」。模型会收到草稿中的旅行条件，并参考搜索摘要；具体开放与优惠请以场馆公告为准。打卡随草稿保存。匿名评价按目的地汇总，同一服务实例使用本地文件保存，不跨服务器同步。
 跨城报价支持通过进程环境变量 TRAVEL_QUOTE_URL 和 TRAVEL_QUOTE_TOKEN 连接自有授权服务。接口接收 POST JSON（origin、destination、date、mode），返回 offers 数组，每项包含 mode、service、departurePlace、arrivalPlace、departureAt、arrivalAt（含时区的 ISO 时间）、priceCNY（每人单程人民币价格）、provider，并可提供 seat、availability、priceNote、departureAddress、arrivalAddress、bookingUrl。服务端按到发时间计算耗时，校验查询日期。未配置不会展示估算票价。项目目前没有内置票务平台账号。
+
+
+### 旅游城市封面
+
+`city-covers.json` 保存城市、图片路径、摄影作者、原始来源和许可，图片保存在 `assets/cities/`。已收录城市优先使用本机封面并在候选列表及转盘阶段预载，未收录城市回退到高德查询。
+
+补充封面时在可访问 Wikimedia 的电脑执行 `node update-city-covers.cjs 杭州 上海`，将更新后的索引和图片一起提交及部署，再重启服务。脚本只导入 CC BY、CC BY-SA、CC0 或公有领域且带作者信息的照片。页面展示作者、原始文件及许可链接。图片按内容命名并长期缓存，封面索引缓存一小时。

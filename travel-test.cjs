@@ -94,3 +94,45 @@ test('旅游记录保存、编辑、删除和清空仅作用于当前分类，�
   click({dataset:{deleteVisit:saved.id}});assert.deepEqual(Array.from(context.s.visits,v=>v.id),['food','play']);
   form.dataset.visit='';submit();context.s.visitTab='travel';click({id:'clearVisits',dataset:{}});assert.deepEqual(Array.from(context.s.visits,v=>v.id),['food','play']);
 });
+
+test('服务器封面无需高德配置，预载成功后显示署名且重复调用复用',async()=>{
+ const cover={url:'/assets/cities/test.jpg',name:'City skyline',source:'https://commons.wikimedia.org/wiki/File:City',author:'Photographer',license:'CC BY-SA 4.0',licenseURL:'https://creativecommons.org/licenses/by-sa/4.0/'};
+ let requests=0,downloads=0;
+ const h=harness(async()=>{requests++;return Response.json({'厦门':cover});});
+ h.context.Image=class {set src(value){if(value){downloads++;queueMicrotask(()=>this.onload());}}};
+ await Promise.all([h.context.loadTravelPhoto(city('厦门')),h.context.loadTravelPhoto(city('厦门'))]);
+ assert.equal(requests,1);assert.equal(downloads,1);assert.equal(h.t.photos.get(city('厦门').id).url,cover.url);
+ assert.match(h.context.travelPhoto(city('厦门')),/Photographer/);
+ await h.context.loadTravelPhoto(city('厦门'));assert.equal(downloads,1);
+});
+test('封面索引失败可重试，图片下载失败可重试',async()=>{
+ let requests=0;
+ const cover={url:'/assets/cities/test.jpg'};
+ const h=harness(async()=>{if(++requests===1)throw Error('offline');return Response.json({'厦门':cover});});
+ h.context.Image=class {set src(value){if(value)queueMicrotask(()=>this.onerror());}};
+ await h.context.loadTravelPhoto(city('厦门'));assert.equal(h.t.photos.size,0);
+ await h.context.loadTravelPhoto(city('厦门'));assert.equal(requests,2);assert.equal(h.t.photos.size,0);
+ h.context.Image=class {set src(value){if(value)queueMicrotask(()=>this.onload());}};
+ await h.context.loadTravelPhoto(city('厦门'));assert.equal(h.t.photos.size,1);
+});
+test('封面批量预载最多同时下载两张，进入转盘后也会预载',async()=>{
+ const catalog=Object.fromEntries(demo.map(c=>[c.name,{url:'/assets/cities/'+c.id+'.jpg'}]));
+ const h=harness(async()=>Response.json(catalog));let active=0,max=0;
+ h.context.Image=class {set src(value){if(value){max=Math.max(max,++active);setImmediate(()=>{active--;this.onload();});}}};
+ h.t.candidates=demo;h.t.stage='wheel';await h.context.loadTravelPhotos();
+ assert.equal(max,2);assert.equal(h.t.photos.size,demo.length);
+});
+test('城市封面接口与文件可缓存且私有索引文件无法下载',async()=>{
+ const {createServer}=require('./server.cjs'),covers=require('./city-covers.json');
+ const server=createServer({config:{}});await new Promise(r=>server.listen(0,'127.0.0.1',r));
+ const base='http://127.0.0.1:'+server.address().port;
+ try {
+  const index=await fetch(base+'/api/travel/covers');assert.equal(index.status,200);assert.match(index.headers.get('cache-control'),/max-age=3600/);
+  assert.deepEqual(await index.json(),covers);
+  for(const cover of Object.values(covers)){
+   const photo=await fetch(base+cover.url);assert.equal(photo.status,200);assert.match(photo.headers.get('content-type'),/^image\//);assert.match(photo.headers.get('cache-control'),/immutable/);assert.ok((await photo.arrayBuffer()).byteLength>1000);
+   assert.ok(cover.author&&cover.license&&cover.source);
+  }
+  assert.equal((await fetch(base+'/city-covers.json')).status,404);
+ }finally{await new Promise(r=>server.close(r));}
+});
