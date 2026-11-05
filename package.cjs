@@ -3,14 +3,19 @@ const {spawnSync}=require('node:child_process');
 const path=require('node:path');
 const script=`
 from pathlib import Path
-import zipfile
+import zipfile, json
 root=Path.cwd()
-files=['index.html','style.css','app.js','core.js','amap-client.js','map-ui.js','discovery.js','server.cjs','ai-service.cjs','ai-harness.cjs','ai-eval.cjs','ai-harness-test.cjs','ai-live-check.cjs','ai-client.js','review-model.js','review-model-test.cjs','review-example-test.cjs','visit-picker.js','visit-picker-test.cjs','reviews.js','reviews.cjs','review-test.cjs','wheel-motion.js','app-history.js','ui-test.cjs','browser-test.cjs','freewheel.js','travel-core.js','travel.js','travel-test.cjs','ai-test.cjs','test.cjs','map-test.cjs','package.cjs','.env.example','README.md','高德接入说明.md','验证记录.md','启动原型.cmd','travel-service.cjs','transport-service.cjs','destination-service.cjs','rail-provider.cjs','flight-provider.cjs','reference-flights.cjs','cn-airports.json','transport-test.cjs','travel-service-test.cjs','robustness-test.cjs']
+files=['index.html','style.css','app.js','core.js','amap-client.js','map-ui.js','discovery.js','server.cjs','ai-service.cjs','ai-harness.cjs','ai-eval.cjs','ai-harness-test.cjs','ai-live-check.cjs','ai-client.js','review-model.js','review-model-test.cjs','review-example-test.cjs','visit-picker.js','visit-picker-test.cjs','reviews.js','reviews.cjs','review-test.cjs','wheel-motion.js','app-history.js','ui-test.cjs','browser-test.cjs','freewheel.js','travel-core.js','travel.js','travel-test.cjs','ai-test.cjs','test.cjs','map-test.cjs','package.cjs','.env.example','README.md','高德接入说明.md','验证记录.md','启动原型.cmd','travel-service.cjs','transport-service.cjs','destination-service.cjs','rail-provider.cjs','flight-provider.cjs','reference-flights.cjs','cn-airports.json','city-covers.json','update-city-covers.cjs','transport-test.cjs','travel-service-test.cjs','robustness-test.cjs']
 destination=root.parent/'都行-demo原型.zip'
 with zipfile.ZipFile(destination,'w',zipfile.ZIP_DEFLATED) as bundle:
     for name in files: bundle.write(root/name,'demo/'+name)
     for name in ['food','play','travel','custom']:
         bundle.write(root/'assets'/(name+'.webp'),'demo/assets/'+name+'.webp')
+    covers=json.loads((root/'city-covers.json').read_text(encoding='utf8'))
+    for cover in covers.values():
+        file=Path(cover['url'].lstrip('/'))
+        if file.parent != Path('assets/cities'): raise ValueError('Unexpected cover path')
+        bundle.write(root/file,'demo/'+file.as_posix())
     for file in (root/'screenshots').iterdir():
         if file.suffix in ['.jpg','.png']: bundle.write(file,'demo/screenshots/'+file.name)
 print('Packaged demo; local credentials excluded.')

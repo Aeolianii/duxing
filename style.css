@@ -317,3 +317,40 @@ dialog.result-full .modal-inner{min-height:100%;overflow:visible;overscroll-beha
   margin-top: 10px;
   white-space: nowrap;
 }
+
+@media (orientation: landscape) and (max-height: 500px) {
+  .home-shortcuts { position: static; justify-content: center; margin: 16px auto 0; }
+  .is-home main { padding-bottom: calc(16px + env(safe-area-inset-bottom)); }
+}
+
+.favorite-cards .food-card, .travel-city { display: flex; flex-direction: column; }
+.favorite-cards .card-foot { display: grid; gap: 4px; margin-top: auto; }
+.favorite-cards .card-foot button { min-height: 44px; white-space: nowrap; font-size: 12px; }
+.favorite-cards [data-add-favorite] { background: #f7eef9; border-radius: 12px; }
+.person { grid-template-columns: 18px minmax(0,1fr) minmax(0,1fr) 44px; }
+.person-username span { white-space: nowrap; flex: none; }
+.person > button[data-remove-person]:last-child, .travel-city .actions .quiet, .travel-stop [data-travel-delete-spot],
+#travelNewRound, [data-area-hotels] { min-width: 44px; min-height: 44px; }
+#memberFields > .member-group { padding: 0 10px; margin: 12px 0; border: 1px solid #dce9f1; border-radius: 14px; background: #f7fbfd; }
+.member-group > summary { cursor: pointer; padding: 12px 0; font-weight: 600; color: #345e7c; }
+.member-group fieldset { margin: 0 0 12px; }
+.travel-city-copy { display: flex; flex-direction: column; flex: 1; }
+.travel-city-copy .actions { margin-top: auto; padding-top: 6px; }
+.city-reason { margin-top: 5px; color: #526b7d; font-size: 12px; line-height: 1.6; }
+.city-reason summary, .visit-note summary { cursor: pointer; }
+.city-reason:not([open]) summary span, .visit-note:not([open]) summary span {
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
+}
+.city-reason summary, .visit-note summary { display: block; }
+.city-reason summary::after, .visit-note summary::after { content: "展开"; color: #406987; font-size: 11px; }
+.city-reason[open] summary::after, .visit-note[open] summary::after { content: "收起"; }
+.cover-source, .cover-credit { font-size: 12px; color: #526b7d; line-height: 1.5; }
+.cover-source { padding: 0 10px; }
+.cover-source summary { cursor: pointer; padding: 5px 0; }
+.cover-credit { padding: 6px 10px; overflow-wrap: anywhere; }
+.cover-source .cover-credit { padding: 0 0 6px; }
+.cover-credit a { text-decoration: underline; }
+.visit-entry { display: grid; grid-template-columns: 24px minmax(0,1fr); gap: 8px; align-items: start; }
+.visit-entry .emoji { font-size: 20px; }
+.visit-entry .actions { grid-column: 1/-1; }
+.visit-note { color: var(--muted); margin-top: 8px; line-height: 1.6; font-size: 12px; overflow-wrap: anywhere; }
