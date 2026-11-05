@@ -27,6 +27,31 @@
   function replacement(city,plan,day,index){const used=new Set(plan.days.flatMap(d=>d.spots.map(s=>s.id)));return city.spots.find(s=>!used.has(s.id)&&(!s.fullDay||plan.days[day].spots.length===1))||null;}
   function validConditions(c){const date=typeof c?.date==='string'?new Date(c.date+'T00:00:00Z'):null;return !!(c&&typeof c.origin==='string'&&normalize(c.origin).length>0&&normalize(c.origin).length<=30&&/^\d{4}-\d{2}-\d{2}$/.test(c.date)&&date&&!Number.isNaN(date.getTime())&&date.toISOString().slice(0,10)===c.date&&Number.isInteger(c.days)&&c.days>=1&&c.days<=7&&Number.isFinite(c.budget)&&c.budget>=0&&c.budget<=100000&&['不限','高铁','铁路','飞机','自驾','航运'].includes(c.mode)&&Array.isArray(c.themes)&&c.themes.length<=30&&c.themes.every(t=>typeof t==='string'&&t.length<=40)&&Number.isInteger(c.people)&&c.people>=1&&c.people<=20);}
   function validPlan(p){return p&&typeof p.id==='string'&&cities.some(c=>c.id===p.cityId)&&validConditions(p.conditions)&&Array.isArray(p.days)&&p.days.length===p.conditions.days&&p.days.every(d=>Array.isArray(d?.spots)&&d.spots.length<=12&&d.spots.every(s=>s&&typeof s.id==='string'&&typeof s.name==='string'&&s.name.length<=60))&&p.checklist&&typeof p.checklist==='object';}
-  const api={cities,themes,normalize,distance,matchesPOI,candidates,reason,createPlan,replacement,validConditions,validPlan};
+  // Rebuild from the original proposal so repeated route checks never accumulate delays.
+  function reconcileSchedule(spots,legs,mode,leave){
+    const clock=n=>`${String(Math.floor(n/60)%24).padStart(2,'0')}:${String(n%60).padStart(2,'0')}${n>=1440?'（次日）':''}`;
+    let previousEnd=null;
+    return spots.map((spot,i)=>{
+      const source=spot.suggestedStay||spot.stay||'',parts=source.split(' ｜ '),m=parts[0].match(/^(\d{2}):(\d{2})[–—-](\d{2}):(\d{2})$/);
+      const result={...spot,suggestedStay:source,scheduleNotice:''};
+      const minutes=legs[i];
+      if(i&&Number.isFinite(minutes)&&minutes>=0)parts[2]=`${mode}约 ${Math.ceil(minutes)} 分钟（高德核验，非出发日预测）`;
+      else if(i&&parts.length>2)parts[2]=`${mode}交通待核验`;
+      if(m){
+        const start=+m[1]*60 + +m[2],end=+m[3]*60 + +m[4];
+        if(end>start){
+          const adjusted=i&&previousEnd!=null&&Number.isFinite(minutes)&&minutes>=0?Math.max(start,previousEnd+Math.ceil(minutes)):start;
+          const finish=adjusted+end-start;
+          parts[0]=clock(adjusted)+'–'+clock(finish);
+          if(adjusted>start)result.scheduleNotice=`已按${mode}路程顺延 ${adjusted-start} 分钟；请重新核对开放、预约及返程时间。`;
+          if(finish>=1440)result.scheduleNotice+=' 当天无法完成，安排已跨日，请减少景点。';
+          if(leave&&/^\d{2}:\d{2}$/.test(leave)&&finish>Number(leave.slice(0,2))*60+Number(leave.slice(3)))result.scheduleNotice+=' 已超过返程时间，请减少景点或提前结束。';
+          previousEnd=finish;
+        }else previousEnd=null;
+      }else{previousEnd=null;if(i&&Number.isFinite(minutes))result.scheduleNotice='缺少有效游玩时间，无法校验衔接，请手动核对。';}
+      result.stay=parts.join(' ｜ ');return result;
+    });
+  }
+  const api={cities,themes,normalize,distance,matchesPOI,candidates,reason,createPlan,replacement,validConditions,validPlan,reconcileSchedule};
   if(typeof module!=='undefined')module.exports=api;else root.DouxTravel=api;
 })(typeof window==='undefined'?globalThis:window);

@@ -95,7 +95,7 @@ function travelSources(sources){
   if(!links.length)return '';
   return `<details class="trip-sources"><summary>参考资料（${links.length}）</summary><ul>${links.map(item=>`<li><a href="${esc(item.url)}" target="_blank" rel="noopener noreferrer">${esc(item.title||'查看来源')} <span aria-hidden="true">↗</span></a></li>`).join('')}</ul></details>`;
 }
-function travelSpotHTML(s,i){const p=travel.plan,city=travelCity(p.cityId),poi=travel.poi.get(city.id+'|'+s.name);return `<article class="travel-stop"><div class="travel-stop-number" style="background:${travelColors[travel.day]}">${i+1}</div><div class="travel-stop-copy">${poi?.photos?.[0]?`<img class="travel-spot-photo" src="${esc(poi.photos[0])}" alt="${esc(s.name)} · 高德图片" referrerpolicy="no-referrer">`:''}<h3>${esc(s.name)}${s.must?' <small>必去</small>':''}</h3><p>${esc(s.stay||'游玩时长待查询')}<br>开放 / 门票 / 预约：待查询</p>${poi?`<small class="travel-source">地点与图片：高德 · ${esc(poi.checkedAt)}<br>${esc(poi.address||'')}</small>`:''}<div class="actions"><button class="quiet" data-travel-swap="${i}" ${s.must?'disabled':''}>换一个景点</button><button class="quiet" data-travel-delete-spot="${i}">移除</button></div>${i?`<p class="travel-leg" id="travelLeg${i}">上一站 → 此处：交通方式与耗时待查询</p>`:''}</div></article>`;}
+function travelSpotHTML(s,i){const p=travel.plan,city=travelCity(p.cityId),poi=travel.poi.get(city.id+'|'+s.name);return `<article class="travel-stop"><div class="travel-stop-number" style="background:${travelColors[travel.day]}">${i+1}</div><div class="travel-stop-copy">${poi?.photos?.[0]?`<img class="travel-spot-photo" src="${esc(poi.photos[0])}" alt="${esc(s.name)} · 高德图片" referrerpolicy="no-referrer">`:''}<h3>${esc(s.name)}${s.must?' <small>必去</small>':''}</h3><p>${esc(s.stay||'游玩时长待查询')}<br>开放 / 门票 / 预约：待查询</p>${s.scheduleNotice?`<p class="schedule-warning" role="status">⚠ ${esc(s.scheduleNotice)}</p>`:''}${poi?`<small class="travel-source">地点与图片：高德 · ${esc(poi.checkedAt)}<br>${esc(poi.address||'')}</small>`:''}<div class="actions"><button class="quiet" data-travel-swap="${i}" ${s.must?'disabled':''}>换一个景点</button><button class="quiet" data-travel-delete-spot="${i}">移除</button></div>${i?`<p class="travel-leg" id="travelLeg${i}">上一站 → 此处：交通方式与耗时待查询</p>`:''}</div></article>`;}
 async function lookupTravelPOI(city,name){
   const key=city.id+'|'+name;if(travel.poi.has(key))return travel.poi.get(key);if(travel.poiPending.has(key))return travel.poiPending.get(key);
   if(!state.mapConfigured)return null;
@@ -162,7 +162,26 @@ async function mountTravelMap(){
     // Never connect across an unresolved stop as though it were a complete route.
     if(known.length>1&&known.length===points.length)travel.map.add(new A.Polyline({path:known.map(poi=>poi.location),strokeColor:travelColors[index],strokeWeight:4,strokeStyle:'dashed'}));
     if(known.length)travel.map.setFitView();$('#travelMapNote').textContent=`已定位 ${known.length}/${day.spots.length} 个地点。连线仅表示顺序，不是导航路线；只显示第 ${index+1} 天。`;
-    for(let i=1;i<points.length;i++){if(!active())return;if(!points[i-1]||!points[i])continue;const local=p.conditions.localMode||(p.conditions.mode==='自驾'?'自驾':'公共交通');const mode=['自驾','打车'].includes(local)?'驾车':local;try{const minutes=await DouxMap.route(points[i-1].location,points[i].location,mode,{city:city.name,cityd:city.name,strictMode:true});if(!active())return;if(Number.isFinite(minutes))$('#travelLeg'+i).textContent=`上一站 → 此处：${mode==='公共交通'?'公交 / 地铁（可能含步行）':mode}约 ${minutes} 分钟。高德 · ${new Date().toLocaleString('zh-CN')}，非出发日预测。`;}catch{if(active())$('#travelLeg'+i).textContent='市内交通查询失败，可稍后重试。';}}
+    const local=p.conditions.localMode||(p.conditions.mode==='自驾'?'自驾':'公共交通');
+    const mode=['自驾','打车'].includes(local)?'驾车':local,legs=[],labels=[];
+    for(let i=1;i<points.length;i++){
+      if(!active())return;
+      if(!points[i-1]||!points[i]){labels[i]='地点未定位，无法核对交通及时间衔接';continue;}
+      try{
+        const minutes=await DouxMap.route(points[i-1].location,points[i].location,mode,{city:city.name,cityd:city.name,strictMode:true});
+        if(!active())return;
+        if(Number.isFinite(minutes)&&minutes>=0){legs[i]=minutes;labels[i]=`上一站 → 此处：${local==='公共交通'?'公交 / 地铁（可能含步行）':local}约 ${Math.ceil(minutes)} 分钟。高德 · ${new Date().toLocaleString('zh-CN')}，非出发日预测。`;}
+        else labels[i]='未取得有效路线，无法核对时间衔接，请重试。';
+      }catch{if(!active())return;labels[i]='市内交通查询失败，无法核对时间衔接，请重试。';}
+      $('#travelLeg'+i).textContent=labels[i];
+    }
+    if(!active())return;
+    const reconciled=DouxTravel.reconcileSchedule(day.spots,legs,local,index===p.days.length-1?p.conditions.leave:null);
+    const changed=JSON.stringify(day.spots)!==JSON.stringify(reconciled);
+    day.spots=reconciled;
+    $('#travelStops').innerHTML=day.spots.map((s,i)=>travelSpotHTML(s,i)).join('');
+    labels.forEach((label,i)=>{if(label&&$('#travelLeg'+i))$('#travelLeg'+i).textContent=label;});
+    if(changed)markTravelDirty();
   }catch{if(active()){$('#travelMap').innerHTML='<p>地图加载失败，可以重试。</p>';}}
 }
 function renderTravelLibrary(){

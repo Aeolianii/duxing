@@ -270,7 +270,18 @@ function handleCompactAction(button){
     case 'searchCustom':if(state.live)openLocation('custom');else setupSheet();break;
     case 'mapSetup':case 'mapSetupLink':setupSheet();break;
     case 'fetchCandidates':refreshCandidates();break;
-    case 'applyFilters':$('#modal').close();generate();render();toast('已保存，点击生成转盘继续');break;
+    case 'applyFilters':{
+      const picker=$('#modal').querySelector('[data-select-person]');
+      if(picker){
+        let first=null;
+        for(const b of $('#modal').querySelectorAll('[data-select-person]')){
+          const missing=!DouxMap.coordinates(state.people[+b.dataset.selectPerson]?.origin?.location);
+          b.classList.toggle('missing-origin',missing);b.setAttribute('aria-invalid',String(missing));
+          if(missing){b.textContent='请先选择出发点 ›';first=first||b;}
+        }
+        if(first){first.scrollIntoView({block:'center'});first.focus();toast('请先选好每个人的出发点');return true;}
+      }
+      $('#modal').close();generate();render();toast('已保存，点击生成转盘继续');break;}
     case 'generate':$('#modal').close();refreshCandidates();break;
     case 'customValidate':validateCustom();break;
     case 'mapSearchGo':searchMap();break;
