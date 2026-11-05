@@ -356,3 +356,5 @@ dialog.result-full .modal-inner{min-height:100%;overflow:visible;overscroll-beha
 .visit-note { color: var(--muted); margin-top: 8px; line-height: 1.6; font-size: 12px; overflow-wrap: anywhere; }
 
 .opening-warning,.schedule-warning{padding:12px 14px;border:1px solid #e8a15a;border-radius:12px;background:#fff0dc;color:#843b0b;font-size:14px;line-height:1.65;font-weight:600}.missing-origin{border:2px solid #b53b40!important;background:#fff0ef!important;color:#922b30!important}
+
+#retryLocationMap[hidden]{display:none}

@@ -82,13 +82,18 @@ function bindDemoHome(){
 function paintDemoPins(){
   const ps=people();$('#demoPins').innerHTML=ps.map((p,i)=>`<span class="demo-origin" style="left:${p.x}%;top:${p.y}%;color:${state.page==='fair'?personIdentity(i).color:personColors[0]}">${originPin(state.page==='fair'?personIdentity(i).username:state.username)}</span>`).join('')+discovery.previews.map((s,i)=>`<button class="demo-food food-map-pin" data-preview="${i}" style="left:${15+i*16}%;top:${[28,55,36,70,25][i]}%"><span>${s.emoji}</span><small>${esc(s.name.slice(0,5))}</small></button>`).join('');
 }
-async function mountHomeMap(){
+function mountHomeMap(){
+  const task=mountHomeMapInner();discovery.loading=task;
+  task.finally(()=>{if(discovery.loading===task)discovery.loading=null;});return task;
+}
+async function mountHomeMapInner(){
   const token=discovery.token;
   try{
     const A=await DouxMap.load();if(token!==discovery.token||!$('#homeMap'))return;
     const positions=originList().filter(p=>p.location),center=positions.length?positions[0].location:discovery.camera?.center||[113.32452,23.10647];
     discovery.map=new A.Map('homeMap',{zoom:discovery.camera?.zoom||17,center,viewMode:'2D'});
-    $('#homeMapLoading').remove();
+    $('#homeMapLoading')?.remove();
+    if($('#mapHint'))$('#mapHint').textContent=state.page==='fair'?'点击地图，调整当前成员的出发点':'点击地图选择出发点';
     discovery.map.on('click',event=>chooseHomePoint(DouxMap.coordinates(event.lnglat)));
     discovery.map.on('zoomend',()=>paintHomePins(false));
     paintHomePins(true);loadHomePreviews();
@@ -183,4 +188,13 @@ function handleDiscoveryAction(button){
     case 'retryMap':render();break;
     default:return false;
   }return true;
+}
+
+async function recoverHomeMap(){
+  const token=discovery.token;
+  if(discovery.loading)await discovery.loading;
+  if(token!==discovery.token||!$('#homeMap'))return;
+  if(discovery.map){const c=DouxMap.coordinates(discovery.map.getCenter());discovery.camera={center:c,zoom:discovery.map.getZoom()};discovery.map.destroy();}
+  discovery.token++;discovery.previewToken++;discovery.map=null;discovery.markers=[];
+  await mountHomeMap();
 }

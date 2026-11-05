@@ -1,13 +1,13 @@
 'use strict';
 // Compact phone UI and the real-map workflow share the existing roulette state.
-const mapUI={map:null,marker:null,token:0,searchToken:0,draft:null,target:null,results:[]};
+const mapUI={map:null,marker:null,token:0,searchToken:0,draft:null,target:null,results:[],loading:null,failed:false,failedQuery:null,recovery:0};
 state.live=false;state.mapConfigured=false;state.catalog={};state.request=0;state.checkingMap=true;
 // Captured once at load so tests can freeze Date.now() without breaking the
 // arrival-time check for opening hours.
 const LOCAL_OFFSET_MINUTES=-new Date().getTimezoneOffset();
 function localMinuteOfDay(){return Math.floor((Date.now()+LOCAL_OFFSET_MINUTES*60000)/60000)%1440;}
 
-function disposeMap(){mapUI.token++;mapUI.searchToken++;mapUI.map?.destroy();mapUI.map=null;mapUI.marker=null;}
+function disposeMap(){mapUI.recovery++;mapUI.failed=false;mapUI.failedQuery=null;mapUI.token++;mapUI.searchToken++;mapUI.map?.destroy();mapUI.map=null;mapUI.marker=null;}
 function openFilters(){showModal(modalTop((state.activity==='play')?'🎡 这一次，想怎么玩？':'🍋 这一顿，想怎么吃？')+settings());}
 function openCandidates(){const play=state.activity==='play';showModal(modalTop(play?'🎡 本轮的游玩候选':'🍽️ 本轮的美味候选')+`<div class="candidate-list">${available().map(s=>`<div class="candidate-row"><button data-detail="${s.id}" class="candidate-main"><span class="candidate-emoji">${s.emoji||'🍽️'}</span><span><strong>${esc(s.name)}</strong><small>${(()=>{const p=typeof priceMeta==='function'?priceMeta(s):{text:s.price==null?'人均未知':'¥'+s.price,note:s.price==null,label:'参考人均'};return esc(p.note?p.text:(p.label==='门票'?p.text+' 门票':p.text+'/人'))})()}${Number.isFinite(s.max)?' · '+s.max+' 分钟':''}</small></span></button><button data-exclude="${s.id}" class="close" aria-label="移除${esc(s.name)}">×</button></div>`).join('')||`<div class="empty"><b>还没有可抽的${play?'场馆':'餐厅'}</b>试试调整条件，或开启新一轮。</div>`}</div><p class="muted sheet-note">每家概率相同，点店名查看详情。</p>`);}
 function openCustom(){navigate('freewheel');}
@@ -25,29 +25,65 @@ async function openLocation(target='near'){
   }
   const picking=target==='custom'||target==='freewheel';
   const previous=typeof target==='number'?state.people[target].origin:state.origin;
-  showModal(modalTop(target==='freewheel'?'📍 地图选地点':target==='custom'?((state.activity==='play')?'搜索真实场馆':'搜索真实餐厅'):'📍 选一个出发点')+`<div class="search-line"><input id="mapSearch" aria-label="搜索城市、地点或餐厅" placeholder="输入城市、地点或餐厅"><button id="mapSearchGo" class="btn small">搜索</button></div><div id="mapResults" class="map-results"></div><div class="real-map-wrap"><div id="realMap" aria-label="高德地图，可拖拽或点击选点"></div><div id="mapLoading" class="map-loading">正在打开地图…</div></div><div class="map-selection"><strong id="selectedPlace">${esc(previous?.location?previous.name:'默认浏览广州，请搜索或移动地图选点')}</strong><button id="realLocate" class="btn secondary small">⌖ 定位</button></div><p id="mapError" class="muted" role="status">${picking?'搜索餐厅或场馆，点击搜索结果选择具体地点。':'点击地图或拖动地图后，确认出发点。'}</p><button id="confirmLocation" class="btn full sheet-note" ${previous?.location&&!picking?'':'disabled'}>${picking?'将选中的地点加入转盘':'就从这里出发'}</button>`);
+  showModal(modalTop(target==='freewheel'?'📍 地图选地点':target==='custom'?((state.activity==='play')?'搜索真实场馆':'搜索真实餐厅'):'📍 选一个出发点')+`<div class="search-line"><input id="mapSearch" aria-label="搜索城市、地点或餐厅" placeholder="输入城市、地点或餐厅"><button id="mapSearchGo" class="btn small">搜索</button></div><div id="mapResults" class="map-results"></div><div class="real-map-wrap"><div id="realMap" aria-label="高德地图，可拖拽或点击选点"></div><div id="mapLoading" class="map-loading">正在打开地图…</div></div><div class="map-selection"><strong id="selectedPlace">${esc(previous?.location?previous.name:'默认浏览广州，请搜索或移动地图选点')}</strong><button id="realLocate" class="btn secondary small">⌖ 定位</button></div><button id="retryLocationMap" class="btn secondary small" hidden>重试地图</button><p id="mapError" class="muted" role="status">${picking?'搜索餐厅或场馆，点击搜索结果选择具体地点。':'点击地图或拖动地图后，确认出发点。'}</p><button id="confirmLocation" class="btn full sheet-note" ${previous?.location&&!picking?'':'disabled'}>${picking?'将选中的地点加入转盘':'就从这里出发'}</button>`);
   mapUI.target=target;mapUI.draft=previous?.location&&!picking?{...previous}:null;mapUI.results=[];
-  const token=mapUI.token;
-  try{
-    const A=await DouxMap.load();if(token!==mapUI.token||!$('#realMap'))return;
-    const center=previous?.location||[113.32452,23.10647];
-    mapUI.map=new A.Map('realMap',{zoom:15,center,viewMode:'2D'});
-    mapUI.marker=new A.Marker({position:center});mapUI.map.add(mapUI.marker);
-    const select=(point,name)=>{
-      if(picking)return;
-      mapUI.searchToken++;mapUI.draft={location:DouxMap.coordinates(point),name:name||'地图选定位置'};
-      mapUI.marker.setPosition(point);$('#selectedPlace').textContent=mapUI.draft.name;$('#confirmLocation').disabled=false;
-    };
-    mapUI.map.on('click',e=>select(e.lnglat));
-    mapUI.map.on('dragend',()=>select(mapUI.map.getCenter()));
-    $('#mapLoading').remove();
-  }catch(error){if(token===mapUI.token&&$('#mapError')){$('#mapError').textContent=error.message;$('#mapLoading').textContent='地图暂未加载，可关闭后重试';}}
+  mapUI.failed=false;mapUI.failedQuery=null;
+  return mountLocationMap();
 }
+function locationMapHint(){return ['custom','freewheel'].includes(mapUI.target)?'搜索餐厅或场馆，点击搜索结果选择具体地点。':'点击地图或拖动地图后，确认出发点。';}
+function locationMapFailure(message){
+  mapUI.failed=true;
+  if($('#mapError'))$('#mapError').textContent=message;
+  if($('#mapLoading'))$('#mapLoading').textContent='地图暂不可用，联网后自动恢复，也可点击重试';
+  if($('#retryLocationMap'))$('#retryLocationMap').hidden=false;
+}
+function mountLocationMap(){
+  const token=mapUI.token,picking=['custom','freewheel'].includes(mapUI.target);
+  const active=()=>token===mapUI.token&&$('#modal').open&&!!$('#realMap');
+  const task=(async()=>{
+    try{
+      if(navigator.onLine===false)throw Error('网络已断开，已保留输入和所选地点');
+      const A=await DouxMap.load();if(!active())return;if(navigator.onLine===false)throw Error('网络已断开，联网后将自动恢复');
+      const center=mapUI.draft?.location||mapUI.map?.getCenter?.()||[113.32452,23.10647];
+      mapUI.map?.destroy();
+      mapUI.map=new A.Map('realMap',{zoom:15,center,viewMode:'2D'});
+      mapUI.marker=new A.Marker({position:center});mapUI.map.add(mapUI.marker);
+      const select=(point,name)=>{
+        if(picking||!active())return;
+        mapUI.searchToken++;mapUI.draft={location:DouxMap.coordinates(point),name:name||'地图选定位置'};
+        mapUI.marker.setPosition(point);$('#selectedPlace').textContent=mapUI.draft.name;$('#confirmLocation').disabled=false;
+      };
+      mapUI.map.on('click',e=>select(e.lnglat));
+      mapUI.map.on('dragend',()=>select(mapUI.map.getCenter()));
+      $('#mapLoading')?.remove();mapUI.failed=false;
+      $('#mapError').textContent=locationMapHint();$('#retryLocationMap').hidden=true;
+    }catch(error){if(active())locationMapFailure(error.message);}
+  })();
+  mapUI.loading=task;
+  task.finally(()=>{if(mapUI.loading===task)mapUI.loading=null;});
+  return task;
+}
+async function retryLocationMap(){
+  const token=mapUI.token,recovery=++mapUI.recovery;
+  const active=()=>token===mapUI.token&&recovery===mapUI.recovery&&$('#modal').open&&!!$('#realMap');
+  if(mapUI.loading)await mapUI.loading;
+  if(!active())return;
+  if(navigator.onLine===false){locationMapFailure('网络已断开，联网后将自动恢复');return;}
+  $('#mapError').textContent='正在恢复地图…';
+  await mountLocationMap();
+  if(active()&&mapUI.failedQuery&&$('#mapSearch').value.trim()===mapUI.failedQuery)await searchMap();
+}
+
 async function searchMap(){
   const query=$('#mapSearch')?.value.trim();if(!query)return toast('先输入一个地点名称');
   const token=mapUI.token,searchToken=++mapUI.searchToken;
+  mapUI.failedQuery=query;
+  if(navigator.onLine===false){$('#mapResults').textContent='网络已断开，联网后自动重试搜索';return;}
   $('#mapResults').textContent='正在查找…';
   try{const results=await DouxMap.search(query,['custom','freewheel'].includes(mapUI.target)?state.origin?.location:null);if(token!==mapUI.token||searchToken!==mapUI.searchToken)return;
+    mapUI.failedQuery=null;
+    if(!mapUI.failed)$('#mapError').textContent=locationMapHint();
+    else retryLocationMap();
     const playSearch=state.activity==='play';mapUI.results=mapUI.target==='custom'?(playSearch?results.filter(s=>DouxMap.matchesPlay(s,DouxMap.playTypes)).map((s,i)=>DouxMap.decoratePlay(s,i)):results.filter(s=>s.category.startsWith('餐饮'))):results;
     $('#mapResults').innerHTML=mapUI.results.map((p,i)=>`<button data-map-result="${i}"><strong>${esc(p.name)}</strong><small>${esc(p.address)}</small></button>`).join('')||'<p class="muted">没找到匹配地点，试试加上城市名。</p>';
   }catch(error){if(token===mapUI.token&&searchToken===mapUI.searchToken)$('#mapResults').textContent=error.message;}
@@ -285,6 +321,7 @@ function handleCompactAction(button){
     case 'generate':$('#modal').close();refreshCandidates();break;
     case 'customValidate':validateCustom();break;
     case 'mapSearchGo':searchMap();break;
+    case 'retryLocationMap':retryLocationMap();break;
     case 'realLocate':locateReal();break;
     case 'confirmLocation':{
       if(!mapUI.draft)return true;const selected={...mapUI.draft},target=mapUI.target;$('#modal').close();
@@ -308,9 +345,25 @@ function updateSource(){const label=document.querySelector('.demo-label');if(lab
 document.addEventListener('keydown',event=>{if(event.key==='Enter'&&event.target.id==='mapSearch'){event.preventDefault();searchMap();}});
 $('#modal').addEventListener('close',()=>{if(!$('#modal').open)disposeMap();});
 generate();render();
-(async()=>{try{
+let mapConfigPending=false;
+async function refreshMapConfiguration(){if(mapConfigPending)return;mapConfigPending=true;try{
   const result=await fetch('/api/map-config',{signal:AbortSignal.timeout(4000)});if(!result.ok)return;
   const config=await result.json();state.mapConfigured=config.configured;
   if(config.configured){discovery.previews=[];state.live=true;state.origin={name:'选择真实出发点',location:null};generate();render();updateSource();}
 }catch{/* Direct file preview stays in explicitly labelled demo mode. */}
-finally{state.checkingMap=false;render();}})();
+finally{mapConfigPending=false;state.checkingMap=false;render();}}
+refreshMapConfiguration();
+
+window.addEventListener('offline',()=>{
+  if(state.live&&$('#homeMap')&&$('#mapHint'))$('#mapHint').textContent='网络已断开，已保留出发点；联网后自动恢复地图';
+  if($('#modal').open&&$('#realMap')){
+    mapUI.searchToken++;
+    if($('#mapResults').textContent==='正在查找…'){mapUI.failedQuery=$('#mapSearch').value.trim();$('#mapResults').textContent='网络已断开，联网后自动重试搜索';}
+    locationMapFailure('网络已断开，已保留输入和所选地点');
+  }
+});
+window.addEventListener('online',()=>{
+  if(!state.mapConfigured)refreshMapConfiguration();
+  if($('#modal').open&&$('#realMap')&&(mapUI.failed||mapUI.failedQuery))retryLocationMap();
+  if(state.live&&$('#homeMap')&&typeof recoverHomeMap==='function')recoverHomeMap();
+});
