@@ -6,6 +6,12 @@
 
 > 这是个人学习与原型验证项目，**不是**生产级应用；评分、营业时段、路线均为查询时的第三方数据，请以前往时的实际情况为准。
 
+## 在线体验
+
+**[点击体验都行 · Douxing](https://8.163.96.131/)**
+
+手机、电脑浏览器均可直接访问，无需本地安装。推荐使用手机竖屏体验。
+
 <p align="center">
   <img src="screenshots/main-home.jpg" width="180" alt="主界面">
   <img src="screenshots/map-home.jpg" width="180" alt="美食地图">
